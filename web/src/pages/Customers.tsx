@@ -1,0 +1,109 @@
+import { useMemo, useState, useEffect } from "react";
+import { useSearchParams, Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Search, Phone, Mail, Pencil, Kanban } from "lucide-react";
+import { toast } from "sonner";
+import { useCollection, insert, update, fullName, fmtDate, type Customer, logActivity } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
+
+const SOURCES = ["Walk-in", "Phone", "Website", "Referral", "Facebook", "CarGurus", "Cars.com", "AutoTrader", "Repeat", "Other"];
+const empty = { firstName: "", lastName: "", phone: "", email: "", address: "", city: "", state: "MA", zip: "", source: "Walk-in", notes: "" };
+
+export default function Customers() {
+  const { user } = useAuth();
+  const customers = useCollection("customers");
+  const leads = useCollection("leads");
+  const [params, setParams] = useSearchParams();
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Customer | null>(null);
+  const [form, setForm] = useState({ ...empty });
+
+  useEffect(() => { if (params.get("new")) { setForm({ ...empty }); setEditing(null); setOpen(true); params.delete("new"); setParams(params, { replace: true }); } }, [params, setParams]);
+
+  const rows = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return customers.filter((c) => !s || `${c.firstName} ${c.lastName} ${c.phone ?? ""} ${c.email ?? ""}`.toLowerCase().includes(s));
+  }, [customers, q]);
+
+  const openEdit = (c: Customer) => { setEditing(c); setForm({ ...empty, ...c } as any); setOpen(true); };
+  const save = () => {
+    if (!form.firstName.trim()) return toast.error("First name is required");
+    if (editing) { update("customers", editing.id, form as any); toast.success("Customer updated"); logActivity("update", "customer", editing.id, undefined, user?.id); }
+    else { const c = insert("customers", { ...form, ownerId: user?.id } as any); toast.success("Customer added"); logActivity("create", "customer", c.id, undefined, user?.id); }
+    setOpen(false);
+  };
+  const set = (k: keyof typeof empty) => (e: any) => setForm({ ...form, [k]: typeof e === "string" ? e : e.target.value });
+
+  return (
+    <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div><h1 className="text-3xl font-black">Customers</h1><p className="text-muted-foreground">{customers.length} on file</p></div>
+        <div className="flex gap-2">
+          <div className="relative w-64"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Search name, phone, email" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+          <Button onClick={() => { setEditing(null); setForm({ ...empty }); setOpen(true); }}><Plus className="h-4 w-4 mr-1" /> Add customer</Button>
+        </div>
+      </div>
+
+      {customers.length === 0 ? (
+        <Card><CardContent className="p-10 text-center space-y-3">
+          <p className="text-lg font-semibold">No customers yet</p>
+          <p className="text-muted-foreground">Add your first customer, or import a list later from your DMS / website leads.</p>
+          <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4 mr-1" /> Add customer</Button>
+        </CardContent></Card>
+      ) : (
+        <Card><CardContent className="p-0">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Contact</th><th className="px-4 py-3">Source</th><th className="px-4 py-3">Open leads</th><th className="px-4 py-3">Added</th><th className="px-4 py-3"></th></tr></thead>
+            <tbody className="divide-y">
+              {rows.map((c) => {
+                const open = leads.filter((l) => l.customerId === c.id && !["sold", "lost"].includes(l.stage)).length;
+                return (
+                  <tr key={c.id} className="hover:bg-muted/30">
+                    <td className="px-4 py-3 font-semibold">{fullName(c)}{c.city && <span className="block text-xs font-normal text-muted-foreground">{c.city}, {c.state}</span>}</td>
+                    <td className="px-4 py-3 text-muted-foreground"><div className="flex flex-col gap-0.5">{c.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{c.phone}</span>}{c.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{c.email}</span>}</div></td>
+                    <td className="px-4 py-3"><Badge variant="outline">{c.source || "—"}</Badge></td>
+                    <td className="px-4 py-3">{open ? <Badge>{open}</Badge> : <span className="text-muted-foreground">0</span>}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{fmtDate(c.createdAt)}</td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <Button size="sm" variant="ghost" asChild><Link to={`/leads?customer=${c.id}`}><Kanban className="h-4 w-4" /></Link></Button>
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No matches.</td></tr>}
+            </tbody>
+          </table>
+        </CardContent></Card>
+      )}
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>{editing ? "Edit customer" : "New customer"}</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1"><Label>First name *</Label><Input value={form.firstName} onChange={set("firstName")} autoFocus /></div>
+            <div className="space-y-1"><Label>Last name</Label><Input value={form.lastName} onChange={set("lastName")} /></div>
+            <div className="space-y-1"><Label>Phone</Label><Input value={form.phone} onChange={set("phone")} placeholder="978-555-0100" /></div>
+            <div className="space-y-1"><Label>Email</Label><Input value={form.email} onChange={set("email")} /></div>
+            <div className="space-y-1 col-span-2"><Label>Street</Label><Input value={form.address} onChange={set("address")} /></div>
+            <div className="space-y-1"><Label>City</Label><Input value={form.city} onChange={set("city")} /></div>
+            <div className="grid grid-cols-2 gap-2"><div className="space-y-1"><Label>State</Label><Input value={form.state} onChange={set("state")} /></div><div className="space-y-1"><Label>ZIP</Label><Input value={form.zip} onChange={set("zip")} /></div></div>
+            <div className="space-y-1 col-span-2"><Label>Source</Label>
+              <Select value={form.source} onValueChange={set("source")}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{SOURCES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select>
+            </div>
+            <div className="space-y-1 col-span-2"><Label>Notes</Label><Textarea value={form.notes} onChange={set("notes")} rows={3} /></div>
+          </div>
+          <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={save}>{editing ? "Save" : "Add customer"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

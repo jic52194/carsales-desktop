@@ -1,0 +1,52 @@
+{
+  "name": "carsales-ai-os-desktop",
+  "productName": "CarSales AI OS",
+  "version": "1.1.0",
+  "description": "CarSales AI OS by CarSalesSoftware.com — Windows desktop app",
+  "author": "CarSalesSoftware.com <contact@casperb2b.com>",
+  "homepage": "https://carsalessoftware.com",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "web:install": "cd web && npm install --no-audit --no-fund",
+    "web:build": "cd web && npm run build",
+    "start": "electron .",
+    "dev": "electron . --inspect",
+    "dist": "npm run web:build && electron-builder --win",
+    "dist:portable": "npm run web:build && electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.carsalessoftware.desktop",
+    "productName": "CarSales AI OS",
+    "artifactName": "CarSalesAIOS-Setup.${ext}",
+    "directories": { "output": "release", "buildResources": "build" },
+    "files": [
+      "main.js",
+      "preload.js",
+      "build/icon.png",
+      "web/dist/**/*",
+      "!web/node_modules",
+      "!web/src"
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.ico",
+      "publisherName": "CarSalesSoftware.com"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CarSales AI OS",
+      "runAfterFinish": true
+    },
+    "portable": { "artifactName": "CarSalesAIOS-Portable.${ext}" }
+  }
+}

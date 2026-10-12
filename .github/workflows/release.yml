@@ -1,0 +1,42 @@
+name: Build & publish
+# Every push to main: (1) rebuilds the web app and publishes it as the auto-update bundle
+# (installed desktop apps pick it up on next launch), (2) rebuilds the Windows installer.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  web-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm run web:install
+      - run: npm run web:build
+      - name: Manifest (version = package.json version + run number)
+        run: |
+          V=$(node -p "require('./package.json').version").${{ github.run_number }}
+          node scripts/make-manifest.js "$V" "https://github.com/${{ github.repository }}/releases/latest/download/"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: CarSales AI OS — latest
+          files: release/web/*
+          body: Auto-update bundle + Windows installer. Rebuilt on every push to main.
+  win-installer:
+    runs-on: windows-latest
+    needs: web-bundle
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - run: npm run web:install
+      - run: npm run dist -- --publish never
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          files: release/CarSalesAIOS-Setup.exe
