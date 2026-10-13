@@ -3,3 +3,8 @@ web/node_modules/
 web/dist/
 release/
 *.log
+test/audit/out/
+
+_updates/
+test/audit/out/
+test/audit/log*.txt

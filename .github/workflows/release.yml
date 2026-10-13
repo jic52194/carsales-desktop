@@ -7,6 +7,8 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  pages: write
+  id-token: write
 jobs:
   web-bundle:
     runs-on: ubuntu-latest
@@ -40,3 +42,23 @@ jobs:
         with:
           tag_name: latest
           files: release/CarSalesAIOS-Setup.exe
+  web-hosting:
+    # Live web app at https://app.carsalessoftware.com (GitHub Pages + custom domain; DNS: CNAME app -> jic52194.github.io).
+    # The desktop shell loads this URL, so every push to main reaches every user instantly.
+    runs-on: ubuntu-latest
+    needs: web-bundle
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm run web:install
+      - run: cd web && VITE_BASE=/ npm run build && cp dist/index.html dist/404.html && echo "app.carsalessoftware.com" > dist/CNAME
+      - uses: actions/configure-pages@v5
+        with: { enablement: true }
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: web/dist }
+      - id: deployment
+        uses: actions/deploy-pages@v4

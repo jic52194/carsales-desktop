@@ -1,0 +1,1 @@
+Deployed via Supabase MCP on 2026-10-12. Providers: ghl (verified via /locations), marketcheck (verified), carfax, kbb, routeone, dealertrack, stripe (stored, not verified). Admin-only; secrets land in integration_secrets (service-role only).

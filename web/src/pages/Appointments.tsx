@@ -12,7 +12,7 @@ import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useCollection, insert, update, get, fullName, type Appointment } from "@/lib/store";
 import { useInventory, vTitle } from "@/lib/inventory";
-import { useAuth, listUsers } from "@/lib/auth";
+import { useAuth, useUsers } from "@/lib/auth";
 
 const TYPES = [["test_drive", "Test drive"], ["sales", "Sales appointment"], ["delivery", "Delivery"], ["service", "Service"], ["other", "Other"]] as const;
 const STATUSES = ["scheduled", "confirmed", "showed", "no_show", "cancelled"] as const;
@@ -23,7 +23,7 @@ export default function Appointments() {
   const appts = useCollection("appointments");
   const customers = useCollection("customers");
   const inventory = useInventory();
-  const users = listUsers().filter((u) => u.isActive);
+  const users = useUsers().filter((u) => u.isActive);
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ customerId: "", vehicleId: "", type: "test_drive", startsAt: toLocal(new Date(Date.now() + 3600e3)), assignedTo: user?.id ?? "", notes: "" });
@@ -39,8 +39,8 @@ export default function Appointments() {
 
   const save = () => {
     if (!form.startsAt) return toast.error("Pick a date/time");
-    insert("appointments", { ...form, customerId: form.customerId || undefined, vehicleId: form.vehicleId || undefined, startsAt: new Date(form.startsAt).toISOString(), status: "scheduled" } as any);
-    toast.success("Appointment booked"); setOpen(false);
+    insert("appointments", { ...form, customerId: form.customerId || undefined, vehicleId: form.vehicleId || undefined, assignedTo: form.assignedTo || undefined, startsAt: new Date(form.startsAt).toISOString(), status: "scheduled" } as any)
+      .then(() => { toast.success("Appointment booked"); setOpen(false); }).catch((e) => toast.error(e.message));
   };
   const byDay = rows.reduce<Record<string, Appointment[]>>((acc, a) => { const k = new Date(a.startsAt).toDateString(); (acc[k] ||= []).push(a); return acc; }, {});
 
@@ -65,7 +65,7 @@ export default function Appointments() {
                   <p className="w-24 font-semibold">{new Date(a.startsAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</p>
                   <div className="flex-1"><p className="font-semibold">{fullName(c)} <span className="font-normal text-muted-foreground">· {TYPES.find((t) => t[0] === a.type)?.[1]}</span></p><p className="text-xs text-muted-foreground">{v ? vTitle(v) : ""}{a.notes ? ` — ${a.notes}` : ""}</p></div>
                   <p className="text-xs text-muted-foreground">{users.find((u) => u.id === a.assignedTo)?.fullName}</p>
-                  <Select value={a.status} onValueChange={(s) => update("appointments", a.id, { status: s as any })}><SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger><SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace("_", " ")}</SelectItem>)}</SelectContent></Select>
+                  <Select value={a.status} onValueChange={(s) => update("appointments", a.id, { status: s as any }).catch((e) => toast.error(e.message))}><SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger><SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace("_", " ")}</SelectItem>)}</SelectContent></Select>
                 </div>
               );
             })}

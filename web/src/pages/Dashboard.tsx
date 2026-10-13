@@ -2,10 +2,10 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Car, Users, Kanban, FileSignature, ListTodo, Calendar, Plus, ArrowRight } from "lucide-react";
+import { Car, Users, Kanban, FileSignature, ListTodo, Calendar, Plus, ArrowRight, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useTenant } from "@/lib/tenant";
-import { useInventory, vTitle } from "@/lib/inventory";
+import { useInventory, vTitle, vDaysInStock } from "@/lib/inventory";
 import { useCollection, money, fmtDateTime, fullName, get } from "@/lib/store";
 
 function Stat({ label, value, sub, icon: Icon, to }: { label: string; value: string | number; sub?: string; icon: any; to: string }) {
@@ -47,6 +47,18 @@ export default function Dashboard() {
   const todayStr = now.toDateString();
   const todayAppts = appts.filter((a) => new Date(a.startsAt).toDateString() === todayStr && a.status !== "cancelled").sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const hour = now.getHours();
+  const isMgr = ["super_admin", "owner", "admin", "manager"].includes(user?.role ?? "");
+  const nowIso = now.toISOString();
+  const staleLeads = leads.filter((l) => l.stage === "new" && (isMgr || !l.assignedTo || l.assignedTo === user?.id) && Date.parse(l.createdAt) < now.getTime() - 15 * 60e3);
+  const overdueAll = tasks.filter((t) => t.status === "open" && t.dueAt && t.dueAt < nowIso && (isMgr || !t.assignedTo || t.assignedTo === user?.id));
+  const unconfirmed = todayAppts.filter((a) => a.status === "scheduled" && (isMgr || !a.assignedTo || a.assignedTo === user?.id));
+  const aging = isMgr ? available.filter((v) => vDaysInStock(v) >= 60).sort((a, b) => vDaysInStock(b) - vDaysInStock(a)) : [];
+  const attention: { to: string; text: string; sub?: string }[] = [
+    ...staleLeads.slice(0, 5).map((l) => ({ to: "/leads", text: `Lead from ${fullName(get("customers", l.customerId))} hasn't been contacted`, sub: `${Math.round((now.getTime() - Date.parse(l.createdAt)) / 60e3)} min old${l.source ? ` · ${l.source}` : ""}` })),
+    ...overdueAll.slice(0, 5).map((t) => ({ to: "/tasks", text: t.title, sub: `overdue since ${fmtDateTime(t.dueAt!)}` })),
+    ...unconfirmed.slice(0, 3).map((a) => ({ to: "/appointments", text: `${fullName(get("customers", a.customerId || ""))} at ${new Date(a.startsAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} not confirmed`, sub: a.type.replace("_", " ") })),
+    ...aging.slice(0, 3).map((v) => ({ to: `/inventory/${v.id}`, text: `${vTitle(v)} has sat ${vDaysInStock(v)} days`, sub: `${money(v.price ?? 0)} asking — consider a price move` })),
+  ];
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
@@ -68,6 +80,15 @@ export default function Dashboard() {
         <Stat label="Deals MTD" value={mtdDeals.length} sub={`${money(mtdGross)} gross`} icon={FileSignature} to="/deals" />
         <Stat label="My open tasks" value={myOpenTasks.length} sub={overdue.length ? `${overdue.length} overdue` : "nothing overdue"} icon={ListTodo} to="/tasks" />
       </div>
+
+      {attention.length > 0 && (
+        <Card className="border-amber-300/60 bg-amber-50/40 dark:bg-amber-950/20">
+          <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-amber-800 dark:text-amber-300"><AlertTriangle className="h-5 w-5" /> Needs attention</CardTitle><CardDescription>{attention.length} thing{attention.length > 1 ? "s" : ""} to handle{staleLeads.length ? ` · ${staleLeads.length} uncontacted lead${staleLeads.length > 1 ? "s" : ""}` : ""}{overdueAll.length ? ` · ${overdueAll.length} overdue` : ""}{aging.length ? ` · ${aging.length} aging unit${aging.length > 1 ? "s" : ""}` : ""}</CardDescription></CardHeader>
+          <CardContent className="divide-y">
+            {attention.map((a, i) => <Link key={i} to={a.to} className="py-2 flex items-center justify-between gap-3 hover:text-primary"><span className="text-sm font-medium">{a.text}</span><span className="text-xs text-muted-foreground whitespace-nowrap">{a.sub}</span></Link>)}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid md:grid-cols-2 gap-6">
         <Card>

@@ -12,7 +12,7 @@ import { Plus, Calculator, Calendar, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { useCollection, insert, update, get, fullName, fmtDateTime, logActivity, type Lead, type LeadStage } from "@/lib/store";
 import { useInventory, vTitle } from "@/lib/inventory";
-import { useAuth, listUsers } from "@/lib/auth";
+import { useAuth, useUsers } from "@/lib/auth";
 
 const STAGES: { key: LeadStage; label: string }[] = [
   { key: "new", label: "New" }, { key: "contacted", label: "Contacted" }, { key: "appointment", label: "Appointment" },
@@ -25,7 +25,7 @@ export default function Leads() {
   const leads = useCollection("leads");
   const customers = useCollection("customers");
   const inventory = useInventory();
-  const users = listUsers().filter((u) => u.isActive);
+  const users = useUsers().filter((u) => u.isActive);
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<Lead | null>(null);
@@ -38,15 +38,17 @@ export default function Leads() {
 
   const byStage = useMemo(() => Object.fromEntries(STAGES.map((s) => [s.key, leads.filter((l) => l.stage === s.key)])) as Record<LeadStage, Lead[]>, [leads]);
 
-  const save = () => {
+  const save = async () => {
     if (!form.customerId) return toast.error("Pick a customer");
-    const l = insert("leads", { ...form, vehicleId: form.vehicleId || undefined, stage: "new", lastActivityAt: new Date().toISOString() } as any);
+    let l;
+    try { l = await insert("leads", { ...form, vehicleId: form.vehicleId || undefined, assignedTo: form.assignedTo || undefined, stage: "new" } as any); }
+    catch (e: any) { return toast.error(e.message || "Could not save"); }
     logActivity("create", "lead", l.id, undefined, user?.id);
     toast.success("Lead created");
     setOpen(false);
     setForm({ customerId: "", vehicleId: "", source: "Walk-in", assignedTo: user?.id ?? "", notes: "" });
   };
-  const move = (l: Lead, stage: LeadStage) => { update("leads", l.id, { stage, lastActivityAt: new Date().toISOString() }); setDetail((d) => (d && d.id === l.id ? { ...d, stage } : d)); };
+  const move = (l: Lead, stage: LeadStage) => { update("leads", l.id, { stage }).catch((e) => toast.error(e.message)); setDetail((d) => (d && d.id === l.id ? { ...d, stage } : d)); };
 
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto">
@@ -100,14 +102,15 @@ export default function Leads() {
           const owner = users.find((u) => u.id === detail.assignedTo);
           return (
             <DialogContent>
-              <DialogHeader><DialogTitle>{fullName(c)}</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{c ? <Link to={`/customers/${c.id}`} className="hover:underline" onClick={() => setDetail(null)}>{fullName(c)}</Link> : fullName(c)}</DialogTitle></DialogHeader>
               <div className="space-y-3 text-sm">
                 <div className="grid grid-cols-2 gap-2">
                   <p><span className="text-muted-foreground">Phone:</span> {c?.phone || "—"}</p><p><span className="text-muted-foreground">Email:</span> {c?.email || "—"}</p>
                   <p><span className="text-muted-foreground">Vehicle:</span> {v ? vTitle(v) : "—"}</p><p><span className="text-muted-foreground">Source:</span> {detail.source || "—"}</p>
                   <p><span className="text-muted-foreground">Owner:</span> {owner?.fullName || "Unassigned"}</p><p><span className="text-muted-foreground">Created:</span> {fmtDateTime(detail.createdAt)}</p>
                 </div>
-                {detail.notes && <p className="rounded bg-muted p-2">{detail.notes}</p>}
+                {detail.notes && <p className="rounded bg-muted p-2 whitespace-pre-wrap">{detail.notes}</p>}
+                {(detail as any).sourceUrl && <a className="text-xs text-primary underline" href={(detail as any).sourceUrl} target="_blank" rel="noreferrer">Came from: {(detail as any).sourceUrl}</a>}
                 <div className="space-y-1"><Label>Stage</Label>
                   <Select value={detail.stage} onValueChange={(s) => move(detail, s as LeadStage)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{STAGES.map((s) => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent></Select></div>
                 <div className="flex gap-2 pt-2">

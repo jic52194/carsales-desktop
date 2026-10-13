@@ -8,7 +8,8 @@ import { BESTPRICE_TENANT } from "@/tenants/bestprice";
 export interface TenantHours { [day: string]: string }
 
 export interface Tenant {
-  id: string;            // stable key, e.g. "bestprice"
+  id: string;            // stable key, e.g. "bestprice" (slug)
+  dbId?: string;         // tenants.id in Supabase
   slug: string;          // URL / login slug
   name: string;          // display name
   legalName?: string;
@@ -59,7 +60,30 @@ export const TENANTS: Record<string, Tenant> = {
 export const DEFAULT_TENANT_ID = BESTPRICE_TENANT.id;
 const TENANT_KEY = "cso_tenant_id";
 
+// ---- live tenant (from Supabase `tenants` via me()) ----
+let liveTenant: Tenant | null = null;
+export function tenantFromRow(r: any): Tenant {
+  return {
+    id: r.slug, slug: r.slug, dbId: r.id, name: r.name, legalName: r.legal_name ?? undefined, tagline: r.tagline ?? undefined,
+    address: r.address ?? { street: "", city: "", state: "", zip: "" }, secondLocation: r.second_location ?? undefined,
+    phone: r.phone ?? "", email: r.email ?? null, website: r.website ?? "", hours: r.hours ?? {},
+    logoUrl: r.logo_url ?? "", colors: r.colors ?? { primary: "#2563eb", secondary: "#0f172a", accent: "#f59e0b" },
+    social: r.social ?? {}, googleMapsUrl: undefined, financing: r.financing ?? { notes: [] }, disclaimers: r.disclaimers ?? [],
+    inventorySource: r.inventory_source ?? undefined, plan: r.plan ?? "starter", subscribedAt: r.created_at ?? "", seedVersion: 0,
+    ...( { onboarding: r.onboarding ?? null, intakeKey: r.intake_key ?? null } as any ),
+  };
+}
+export function setLiveTenant(row: any) {
+  if (!row) return;
+  liveTenant = tenantFromRow(row);
+  try { localStorage.setItem(TENANT_KEY, liveTenant.id); } catch {}
+  window.dispatchEvent(new Event("cso:tenant-changed"));
+}
+export function clearLiveTenant() { liveTenant = null; }
+export function getLiveTenant() { return liveTenant; }
+
 export function getTenantId(): string {
+  if (liveTenant) return liveTenant.id;
   try {
     const q = new URLSearchParams(window.location.search).get("tenant");
     if (q && TENANTS[q]) { localStorage.setItem(TENANT_KEY, q); return q; }
@@ -74,7 +98,7 @@ const ONBOARDED_KEY = (id: string) => `cso_onboarded:${id}`;
 
 export function getTenant(): Tenant {
   const id = getTenantId();
-  const base = TENANTS[id] ?? TENANTS[DEFAULT_TENANT_ID];
+  const base = liveTenant ?? TENANTS[id] ?? TENANTS[DEFAULT_TENANT_ID];
   try {
     const raw = localStorage.getItem(OVERRIDES_KEY(base.id));
     if (raw) return { ...base, ...JSON.parse(raw) };
@@ -83,12 +107,32 @@ export function getTenant(): Tenant {
 }
 
 /** Persist dealer edits from onboarding/settings on top of the bundled tenant config. */
-export function saveTenantOverrides(patch: Partial<Tenant>) {
-  const id = getTenantId();
-  let cur: Partial<Tenant> = {};
-  try { cur = JSON.parse(localStorage.getItem(OVERRIDES_KEY(id)) || "{}"); } catch {}
-  localStorage.setItem(OVERRIDES_KEY(id), JSON.stringify({ ...cur, ...patch }));
-  window.dispatchEvent(new Event("cso:tenant-changed"));
+/** Persist dealer edits: writes the tenants row in Supabase (admin RLS) and updates the live tenant. */
+export async function saveTenantOverrides(patch: Partial<Tenant>) {
+  const cur = getTenant();
+  const row: Record<string, any> = {};
+  if (patch.name !== undefined) row.name = patch.name;
+  if (patch.legalName !== undefined) row.legal_name = patch.legalName;
+  if (patch.phone !== undefined) row.phone = patch.phone;
+  if (patch.email !== undefined) row.email = patch.email;
+  if (patch.website !== undefined) row.website = patch.website;
+  if (patch.address !== undefined) row.address = patch.address;
+  if (patch.logoUrl !== undefined) row.logo_url = patch.logoUrl;
+  if (patch.colors !== undefined) row.colors = patch.colors;
+  if (patch.hours !== undefined) row.hours = patch.hours;
+  if (cur.dbId) {
+    const { supabase } = await import("@/lib/supabase");
+    const { data, error } = await supabase.from("tenants").update(row).eq("id", cur.dbId).select().single();
+    if (error) throw new Error(error.message);
+    setLiveTenant(data);
+    try { const me = JSON.parse(localStorage.getItem("cso:me") || "null"); if (me) { me.tenant = data; localStorage.setItem("cso:me", JSON.stringify(me)); } } catch {}
+  } else {
+    const id = getTenantId();
+    let prev: Partial<Tenant> = {};
+    try { prev = JSON.parse(localStorage.getItem(OVERRIDES_KEY(id)) || "{}"); } catch {}
+    localStorage.setItem(OVERRIDES_KEY(id), JSON.stringify({ ...prev, ...patch }));
+    window.dispatchEvent(new Event("cso:tenant-changed"));
+  }
 }
 
 /**
@@ -99,6 +143,8 @@ export function saveTenantOverrides(patch: Partial<Tenant>) {
 export interface OnboardingRecord { completedBy: string; completedByName: string; role: string; at: string; preview?: boolean }
 
 export function getOnboarding(): OnboardingRecord | null {
+  const live = liveTenant as any;
+  if (live && live.onboarding) return live.onboarding as OnboardingRecord;
   try { const r = localStorage.getItem(ONBOARDED_KEY(getTenantId())); if (!r) return null; return r === "true" ? { completedBy: "legacy", completedByName: "", role: "owner", at: "" } : JSON.parse(r); } catch { return null; }
 }
 export function isOnboarded(): boolean {
@@ -114,10 +160,18 @@ export function markOnboarded(user: { id: string; fullName: string; role: string
   if (preview) { localStorage.setItem(`${ONBOARDED_KEY(getTenantId())}:preview:${user.id}`, "true"); return; }
   const rec: OnboardingRecord = { completedBy: user.id, completedByName: user.fullName, role: user.role, at: new Date().toISOString() };
   localStorage.setItem(ONBOARDED_KEY(getTenantId()), JSON.stringify(rec));
+  if (liveTenant?.dbId) {
+    (liveTenant as any).onboarding = rec;
+    import("@/lib/supabase").then(({ supabase }) => supabase.from("tenants").update({ onboarding: rec }).eq("id", liveTenant!.dbId!).then(() => {}));
+  }
 }
 export function resetOnboarding() {
   const base = ONBOARDED_KEY(getTenantId());
   Object.keys(localStorage).filter((k) => k.startsWith(base)).forEach((k) => localStorage.removeItem(k));
+  if (liveTenant?.dbId) {
+    (liveTenant as any).onboarding = null;
+    import("@/lib/supabase").then(({ supabase }) => supabase.from("tenants").update({ onboarding: null }).eq("id", liveTenant!.dbId!).then(() => {}));
+  }
 }
 
 export function setTenant(id: string) {

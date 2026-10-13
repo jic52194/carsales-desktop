@@ -7,12 +7,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
 import { useCollection, insert, update, remove, fmtDateTime } from "@/lib/store";
-import { useAuth, listUsers } from "@/lib/auth";
+import { toast } from "sonner";
+import { useAuth, useUsers } from "@/lib/auth";
 
 export default function Tasks() {
   const { user, hasPermission } = useAuth();
   const tasks = useCollection("tasks");
-  const users = listUsers().filter((u) => u.isActive);
+  const users = useUsers().filter((u) => u.isActive);
   const [title, setTitle] = useState("");
   const [due, setDue] = useState("");
   const [priority, setPriority] = useState<"low" | "normal" | "high">("normal");
@@ -22,7 +23,7 @@ export default function Tasks() {
 
   const add = () => {
     if (!title.trim()) return;
-    insert("tasks", { title: title.trim(), dueAt: due ? new Date(due).toISOString() : undefined, status: "open", priority, assignedTo: assignee || user?.id });
+    insert("tasks", { title: title.trim(), dueAt: due ? new Date(due).toISOString() : undefined, status: "open", priority, assignedTo: assignee || user?.id }).catch((e) => toast.error(e.message));
     setTitle(""); setDue("");
   };
   const visible = tasks.filter((t) => view === "all" || !t.assignedTo || t.assignedTo === user?.id);
@@ -41,7 +42,7 @@ export default function Tasks() {
         <Input type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} className="md:w-52" />
         <Select value={priority} onValueChange={(v: any) => setPriority(v)}><SelectTrigger className="md:w-28"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="normal">Normal</SelectItem><SelectItem value="high">High</SelectItem></SelectContent></Select>
         {canSeeAll && <Select value={assignee} onValueChange={setAssignee}><SelectTrigger className="md:w-44"><SelectValue placeholder="Assign" /></SelectTrigger><SelectContent>{users.map((u) => <SelectItem key={u.id} value={u.id}>{u.fullName}</SelectItem>)}</SelectContent></Select>}
-        <Button onClick={add}><Plus className="h-4 w-4 mr-1" /> Add</Button>
+        <Button onClick={add} disabled={!title.trim()} title={title.trim() ? "" : "Type what needs doing first"}><Plus className="h-4 w-4 mr-1" /> Add</Button>
       </CardContent></Card>
 
       <Card><CardContent className="p-0 divide-y">

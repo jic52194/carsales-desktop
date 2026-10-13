@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useCollection, money } from "@/lib/store";
 import { useInventory, vDaysInStock } from "@/lib/inventory";
-import { listUsers } from "@/lib/auth";
+import { useUsers } from "@/lib/auth";
 
 function Tile({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return <Card><CardContent className="p-5"><p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">{label}</p><p className="text-2xl font-black mt-1">{value}</p>{sub && <p className="text-xs text-muted-foreground">{sub}</p>}</CardContent></Card>;
@@ -13,7 +13,7 @@ export default function Reports() {
   const deals = useCollection("deals");
   const leads = useCollection("leads");
   const customers = useCollection("customers");
-  const users = listUsers();
+  const users = useUsers();
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 

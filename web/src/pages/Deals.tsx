@@ -9,7 +9,7 @@ import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useCollection, update, get, fullName, money, fmtDate, type Deal, type DealStatus, logActivity } from "@/lib/store";
 import { useInventory, vTitle, upsertVehicle } from "@/lib/inventory";
-import { useAuth, listUsers } from "@/lib/auth";
+import { useAuth, useUsers } from "@/lib/auth";
 
 const STATUS: { key: DealStatus; label: string; cls: string }[] = [
   { key: "working", label: "Working", cls: "bg-slate-100 text-slate-800" },
@@ -24,7 +24,7 @@ export default function Deals() {
   const { user, hasPermission } = useAuth();
   const deals = useCollection("deals");
   const inventory = useInventory();
-  const users = listUsers();
+  const users = useUsers();
   const [params, setParams] = useSearchParams();
   const [filter, setFilter] = useState<"active" | "all" | DealStatus>("active");
   const [open, setOpen] = useState<Deal | null>(null);
@@ -33,18 +33,19 @@ export default function Deals() {
   useEffect(() => { const id = params.get("open"); if (id) { const d = deals.find((x) => x.id === id); if (d) setOpen(d); setParams({}, { replace: true }); } }, [params, deals, setParams]);
 
   const rows = useMemo(() => deals.filter((d) => filter === "all" ? true : filter === "active" ? !["delivered", "dead"].includes(d.status) : d.status === filter), [deals, filter]);
-  const setStatus = (d: Deal, status: DealStatus) => {
-    update("deals", d.id, { status });
-    logActivity("status", "deal", d.id, status, user?.id);
-    const v = d.vehicleId ? inventory.find((x) => x.id === d.vehicleId) : undefined;
-    if (v) {
-      if (["approved", "funded"].includes(status) && v.status === "Available") upsertVehicle({ ...v, status: "Pending" });
-      if (status === "delivered") upsertVehicle({ ...v, status: "Sold" });
-      if (status === "dead" && v.status === "Pending") upsertVehicle({ ...v, status: "Available" });
-    }
-    if (d.customerId && status === "delivered") { /* mark lead sold */ }
-    toast.success(`Deal ${STATUS.find((s) => s.key === status)?.label.toLowerCase()}`);
-    setOpen((o) => (o && o.id === d.id ? { ...o, status } : o));
+  const setStatus = async (d: Deal, status: DealStatus) => {
+    try {
+      await update("deals", d.id, { status });
+      logActivity("status", "deal", d.id, status, user?.id);
+      const v = d.vehicleId ? inventory.find((x) => x.id === d.vehicleId) : undefined;
+      if (v) {
+        if (["approved", "funded"].includes(status) && v.status === "Available") await upsertVehicle({ ...v, status: "Pending" });
+        if (status === "delivered") await upsertVehicle({ ...v, status: "Sold" });
+        if (status === "dead" && v.status === "Pending") await upsertVehicle({ ...v, status: "Available" });
+      }
+      toast.success(`Deal ${STATUS.find((s) => s.key === status)?.label.toLowerCase()}`);
+      setOpen((o) => (o && o.id === d.id ? { ...o, status } : o));
+    } catch (e: any) { toast.error(e.message || "Could not update"); }
   };
 
   return (

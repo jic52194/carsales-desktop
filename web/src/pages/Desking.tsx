@@ -59,7 +59,7 @@ export default function Desking() {
   const set = (k: keyof DealParameters) => (n: number) => setP({ ...p, [k]: n });
   const terms = [24, 36, 48, 60, 72, 84];
 
-  const save = (status: Deal["status"] = "working") => {
+  const save = async (status: Deal["status"] = "working") => {
     if (!customerId) return toast.error("Select a customer");
     if (!vehicleId) return toast.error("Select a vehicle");
     const row = {
@@ -70,10 +70,12 @@ export default function Desking() {
       monthlyPayment: calc.monthlyPayment, amountFinanced: calc.amountFinanced, frontEndGross: calc.frontEndGross, backEndGross: calc.backEndGross, totalGross: calc.totalGross,
     };
     localStorage.setItem(DEFAULTS_KEY, JSON.stringify({ pack: p.pack, docFee: p.docFee, taxRate: p.taxRate, nonTaxableFees: p.nonTaxableFees, termMonths: p.termMonths, apr: p.apr, bankFee: p.bankFee, dealerReserve: p.dealerReserve }));
-    const d = existing ? update("deals", existing.id, row as any)! : insert("deals", row as any);
-    const leadId = params.get("lead"); if (leadId && !existing) update("leads", leadId, { stage: "negotiating", lastActivityAt: new Date().toISOString() });
-    toast.success(existing ? "Deal updated" : "Deal saved");
-    navigate(`/deals?open=${d.id}`);
+    try {
+      const d = existing ? (await update("deals", existing.id, row as any))! : await insert("deals", row as any);
+      const leadId = params.get("lead"); if (leadId && !existing) update("leads", leadId, { stage: "negotiating" }).catch(() => {});
+      toast.success(existing ? "Deal updated" : "Deal saved");
+      navigate(`/deals?open=${d.id}`);
+    } catch (e: any) { toast.error(e.message || "Could not save deal"); }
   };
 
   return (
@@ -122,7 +124,7 @@ export default function Desking() {
 
         <div className="space-y-6">
           <Card className="bg-slate-900 text-white">
-            <CardHeader><CardDescription className="text-slate-400">Monthly payment</CardDescription><CardTitle className="text-4xl font-black">{formatCurrency(calc.monthlyPayment)}<span className="text-base font-normal text-slate-400">/mo</span></CardTitle></CardHeader>
+            <CardHeader><CardDescription className="text-slate-400">Monthly payment</CardDescription><CardTitle className="text-4xl font-black">{p.sellingPrice > 0 ? formatCurrency(calc.monthlyPayment) : "—"}<span className="text-base font-normal text-slate-400">/mo</span></CardTitle>{p.sellingPrice <= 0 && <p className="text-xs text-slate-400 mt-1">Pick a vehicle or enter a selling price to see the payment.</p>}</CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-slate-400">Amount financed</span><span>{formatCurrency(calc.amountFinanced)}</span></div>
               <div className="flex justify-between"><span className="text-slate-400">Taxes</span><span>{formatCurrency(calc.totalTaxes)}</span></div>
@@ -134,7 +136,7 @@ export default function Desking() {
             </CardContent>
           </Card>
           <Card><CardHeader><CardTitle className="text-base">Payment grid</CardTitle><CardDescription>By term at current APR</CardDescription></CardHeader><CardContent className="grid grid-cols-3 gap-2">
-            {terms.map((t) => { const c = calculateDeal({ ...p, termMonths: t }); return <button key={t} onClick={() => setP({ ...p, termMonths: t })} className={`rounded-lg border p-2 text-center ${t === p.termMonths ? "border-primary bg-primary/10" : ""}`}><p className="text-xs text-muted-foreground">{t} mo</p><p className="font-bold">{formatCurrency(c.monthlyPayment)}</p></button>; })}
+            {terms.map((t) => { const c = calculateDeal({ ...p, termMonths: t }); return <button key={t} onClick={() => setP({ ...p, termMonths: t })} className={`rounded-lg border p-2 text-center ${t === p.termMonths ? "border-primary bg-primary/10" : ""}`}><p className="text-xs text-muted-foreground">{t} mo</p><p className="font-bold">{p.sellingPrice > 0 ? formatCurrency(c.monthlyPayment) : "—"}</p></button>; })}
           </CardContent></Card>
           <Card className="print:block"><CardContent className="p-4 text-xs text-muted-foreground space-y-1">
             <p className="font-semibold text-foreground">{tenant.name}</p><p>{formatAddress(tenant)} · {tenant.phone}</p>

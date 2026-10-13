@@ -6,15 +6,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Check, Building2, Palette, Car, Plug, Rocket, ArrowRight, ArrowLeft } from "lucide-react";
+import { Check, Building2, Palette, Car, Plug, Rocket, ArrowRight, ArrowLeft, MapPin, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useTenant, saveTenantOverrides, markOnboarded, applyTenantTheme, formatAddress } from "@/lib/tenant";
 import { loadInventory, vTitle } from "@/lib/inventory";
 import { useAuth } from "@/lib/auth";
+import { useLocations, createLocation, updateLocation } from "@/lib/locations";
 
 const STEPS = [
   { key: "dealer", title: "Dealership", icon: Building2 },
   { key: "brand", title: "Branding", icon: Palette },
+  { key: "stores", title: "Stores", icon: MapPin },
   { key: "inventory", title: "Inventory", icon: Car },
   { key: "integrations", title: "Connections", icon: Plug },
   { key: "done", title: "Launch", icon: Rocket },
@@ -22,15 +24,15 @@ const STEPS = [
 
 // Integrations the real product needs. `status` is what this build can do TODAY.
 export const INTEGRATIONS = [
-  { name: "Inventory feed (Dealer Car Search)", need: "Nightly sync of stock, prices, photos from the dealer's website platform", status: "imported-once", api: "DCS dealer export / CSV feed or scrape of bestpriceautosales.net" },
+  { name: "Inventory feed (Dealer Car Search)", need: "Nightly sync of stock, prices, photos from the dealer's website platform", status: "live", api: "Nightly sync from your website (Dealer Car Search) — new, sold, prices, photos" },
   { name: "VIN decode", need: "Auto-fill year/make/model/engine when adding a car", status: "live", api: "NHTSA vPIC (free, no key) — already wired in Inventory + Appraisals" },
   { name: "Vehicle valuations", need: "Trade / retail book values on appraisals & desking", status: "needs-api", api: "KBB ICO, J.D. Power (NADA), Black Book, or MarketCheck" },
   { name: "Vehicle history", need: "CARFAX / AutoCheck badge on VDP", status: "needs-api", api: "CARFAX dealer API (dealer already has CARFAX on their site)" },
   { name: "Credit application + lenders", need: "Submit credit apps, pull approvals", status: "needs-api", api: "RouteOne or Dealertrack; Capital One Auto Navigator + Credit Acceptance are the dealer's current lenders" },
   { name: "SMS / email / calls (CRM)", need: "Lead follow-up, texting templates, BDC", status: "needs-api", api: "GoHighLevel sub-account (CasperPortal) — Conversations API + LC Phone" },
   { name: "Appointments / calendars", need: "Test drives, service scheduling", status: "needs-api", api: "GoHighLevel Calendars API (demo already calls backend.leadconnectorhq.com)" },
-  { name: "AI assistant", need: "Deal rescue, follow-up copy, morning brief, VirtualBDC", status: "needs-api", api: "Claude API via a small server/Edge Function (never ship the key in the app)" },
-  { name: "Accounts / users / roles", need: "Real logins per salesperson, manager, F&I", status: "needs-backend", api: "Supabase Auth + RLS (same pattern as TimeHub); tenant_id on every table" },
+  { name: "AI assistant", need: "Follow-up texts/emails, vehicle descriptions, inventory Q&A, morning brief", status: "needs-api", api: "Built in — switches on when the Anthropic key is added server-side" },
+  { name: "Accounts / users / roles", need: "Real logins per salesperson, manager, F&I", status: "live", api: "Supabase Auth + row-level security; every record scoped to your dealership" },
   { name: "Payments / billing", need: "Subscriptions for CarSalesSoftware.com", status: "needs-api", api: "Stripe (Jared's call — money gate)" },
   { name: "Website lead forms", need: "Leads from bestpriceautosales.net into CRM", status: "needs-api", api: "GHL webhook / form embed, or DCS lead email parsing" },
   { name: "OCR (license / docs)", need: "Scan driver's license at intake", status: "live", api: "tesseract.js (runs locally, already bundled)" },
@@ -68,6 +70,7 @@ export default function Onboarding() {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
 
   const persist = () => {
+    if (isPreview) { applyTenantTheme(); return; }
     saveTenantOverrides({
       name: form.name,
       legalName: form.legalName,
@@ -77,8 +80,7 @@ export default function Onboarding() {
       address: { street: form.street, city: form.city, state: form.state, zip: form.zip },
       logoUrl: form.logoUrl,
       colors: { primary: form.primary, secondary: form.secondary, accent: form.accent, estimated: false },
-    });
-    applyTenantTheme();
+    }).then(() => applyTenantTheme()).catch((e: any) => toast.error(e.message || "Could not save dealership info"));
   };
 
   const next = () => { persist(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); };
@@ -161,7 +163,9 @@ export default function Onboarding() {
           </Card>
         )}
 
-        {step === 2 && (
+        {step === 2 && <StoresStep />}
+
+        {step === 3 && (
           <Card>
             <CardHeader><CardTitle>Inventory import</CardTitle><CardDescription>Imported from {tenant.inventorySource?.platform ?? "website"}{tenant.inventorySource?.dealerId && ` (dealer #${tenant.inventorySource.dealerId})`}.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
@@ -184,7 +188,7 @@ export default function Onboarding() {
           </Card>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <Card>
             <CardHeader><CardTitle>Connections</CardTitle><CardDescription>What's working today vs. what needs an API key or the cloud backend.</CardDescription></CardHeader>
             <CardContent className="divide-y">
@@ -201,7 +205,7 @@ export default function Onboarding() {
           </Card>
         )}
 
-        {step === 4 && (
+        {step === 5 && (
           <Card>
             <CardHeader><CardTitle>Ready to launch</CardTitle><CardDescription>{form.name} · {formatAddress({ ...tenant, address: { street: form.street, city: form.city, state: form.state, zip: form.zip } })} · {form.phone}</CardDescription></CardHeader>
             <CardContent className="space-y-3 text-sm">
@@ -220,6 +224,55 @@ export default function Onboarding() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+
+/** Confirm every rooftop: name, phone, address. Store-bound staff only see their own store's units, leads and deals. */
+function StoresStep() {
+  const locations = useLocations();
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ name: "", phone: "", street: "", city: "", state: "MA", zip: "" });
+  const save = async (id: string, patch: any) => { try { await updateLocation(id, patch); toast.success("Store saved"); } catch (e: any) { toast.error(e.message); } };
+  const add = async () => {
+    if (!draft.name.trim()) return toast.error("Store name is required");
+    try { await createLocation({ name: draft.name.trim(), phone: draft.phone || null, address: { street: draft.street, city: draft.city, state: draft.state, zip: draft.zip } }); setAdding(false); setDraft({ name: "", phone: "", street: "", city: "", state: "MA", zip: "" }); toast.success("Store added"); }
+    catch (e: any) { toast.error(e.message); }
+  };
+  return (
+    <Card>
+      <CardHeader><CardTitle>Stores</CardTitle><CardDescription>Confirm each rooftop. People assigned to a store see only that store's inventory, leads and deals; owners and admins see every store combined.</CardDescription></CardHeader>
+      <CardContent className="space-y-4">
+        {locations.map((l) => <StoreRow key={l.id} loc={l} onSave={(patch) => save(l.id, patch)} />)}
+        {locations.length === 0 && <p className="text-sm text-muted-foreground">No stores yet — add your main rooftop.</p>}
+        {adding ? (
+          <div className="rounded-xl border p-4 grid md:grid-cols-2 gap-3">
+            <div className="space-y-1 md:col-span-2"><Label>Store name *</Label><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Lawrence" autoFocus /></div>
+            <div className="space-y-1"><Label>Phone</Label><Input value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} /></div>
+            <div className="space-y-1"><Label>Street</Label><Input value={draft.street} onChange={(e) => setDraft({ ...draft, street: e.target.value })} /></div>
+            <div className="space-y-1"><Label>City</Label><Input value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} /></div>
+            <div className="grid grid-cols-2 gap-2"><div className="space-y-1"><Label>State</Label><Input value={draft.state} onChange={(e) => setDraft({ ...draft, state: e.target.value })} maxLength={2} /></div><div className="space-y-1"><Label>ZIP</Label><Input value={draft.zip} onChange={(e) => setDraft({ ...draft, zip: e.target.value })} /></div></div>
+            <div className="md:col-span-2 flex gap-2"><Button onClick={add}>Add store</Button><Button variant="outline" onClick={() => setAdding(false)}>Cancel</Button></div>
+          </div>
+        ) : <Button variant="outline" onClick={() => setAdding(true)}><Plus className="h-4 w-4 mr-1" /> Add another store</Button>}
+      </CardContent>
+    </Card>
+  );
+}
+function StoreRow({ loc, onSave }: { loc: any; onSave: (patch: any) => void }) {
+  const a = loc.address || {};
+  const [f, setF] = useState({ name: loc.name || "", phone: loc.phone || "", street: a.street || "", city: a.city || "", state: a.state || "", zip: a.zip || "" });
+  const dirty = f.name !== (loc.name || "") || f.phone !== (loc.phone || "") || f.street !== (a.street || "") || f.city !== (a.city || "") || f.state !== (a.state || "") || f.zip !== (a.zip || "");
+  return (
+    <div className="rounded-xl border p-4 grid md:grid-cols-2 gap-3">
+      <div className="md:col-span-2 flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" /><span className="font-semibold">{loc.name}</span>{loc.isDefault && <Badge variant="secondary">Main store</Badge>}</div>
+      <div className="space-y-1"><Label>Store name</Label><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></div>
+      <div className="space-y-1"><Label>Phone</Label><Input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></div>
+      <div className="space-y-1"><Label>Street</Label><Input value={f.street} onChange={(e) => setF({ ...f, street: e.target.value })} /></div>
+      <div className="space-y-1"><Label>City</Label><Input value={f.city} onChange={(e) => setF({ ...f, city: e.target.value })} /></div>
+      <div className="grid grid-cols-2 gap-2"><div className="space-y-1"><Label>State</Label><Input value={f.state} onChange={(e) => setF({ ...f, state: e.target.value })} maxLength={2} /></div><div className="space-y-1"><Label>ZIP</Label><Input value={f.zip} onChange={(e) => setF({ ...f, zip: e.target.value })} /></div></div>
+      <div className="flex items-end"><Button size="sm" disabled={!dirty} onClick={() => onSave({ name: f.name.trim(), phone: f.phone || null, address: { street: f.street, city: f.city, state: f.state.toUpperCase(), zip: f.zip } })}>Save store</Button></div>
     </div>
   );
 }

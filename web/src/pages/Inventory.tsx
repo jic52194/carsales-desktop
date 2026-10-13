@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Plus, Search, LayoutGrid, List, Loader2 } from "lucide-react";
+import { Plus, Search, LayoutGrid, List, Loader2, Download } from "lucide-react";
+import { downloadCsv, stamp } from "@/lib/csv";
 import { toast } from "sonner";
-import { useInventory, upsertVehicle, vTitle, vPrice, vMiles, vImage, vDaysInStock, type Vehicle } from "@/lib/inventory";
+import { useInventory, upsertVehicle, uploadVehiclePhotos, vTitle, vPrice, vMiles, vImage, vDaysInStock, type Vehicle } from "@/lib/inventory";
 import { useAuth } from "@/lib/auth";
 import { getTenantId } from "@/lib/tenant";
 import { money } from "@/lib/store";
@@ -29,6 +30,7 @@ export default function Inventory() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...blank });
   const [decoding, setDecoding] = useState(false);
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -53,15 +55,19 @@ export default function Inventory() {
     } catch { toast.error("VIN decode failed (offline?)"); } finally { setDecoding(false); }
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.stockNumber.trim() || !form.make.trim() || !form.model.trim()) return toast.error("Stock #, make and model are required");
     if (inventory.some((v) => v.stockNumber.toLowerCase() === form.stockNumber.trim().toLowerCase())) return toast.error("Stock number already exists");
     const v: Vehicle = {
-      id: `${getTenantId()}-${Date.now().toString(36)}`, tenantId: getTenantId(), stockNumber: form.stockNumber.trim(), vin: form.vin.trim().toUpperCase(), year: Number(form.year), make: form.make.trim(), model: form.model.trim(), trim: form.trim.trim(),
+      id: `new-${Date.now().toString(36)}`, tenantId: getTenantId(), stockNumber: form.stockNumber.trim(), vin: form.vin.trim().toUpperCase(), year: Number(form.year), make: form.make.trim(), model: form.model.trim(), trim: form.trim.trim(),
       bodyStyle: form.bodyStyle || null, mileage: Number(form.mileage) || 0, price: Number(form.price) || null, cost: Number(form.cost) || null, exteriorColor: form.exteriorColor || null, interiorColor: form.interiorColor || null,
       transmission: form.transmission || null, drivetrain: form.drivetrain || null, engine: form.engine || null, fuelType: form.fuelType || null, images: form.imageUrl ? [form.imageUrl] : [], description: form.description, features: [], status: form.status, addedAt: new Date().toISOString(), source: "manual",
     };
-    upsertVehicle(v); toast.success("Vehicle added"); setOpen(false); setForm({ ...blank });
+    try {
+      const saved = await upsertVehicle(v);
+      if (photoFiles.length) { try { const urls = await uploadVehiclePhotos(saved.id, photoFiles); await upsertVehicle({ ...saved, images: [...saved.images, ...urls] }); } catch (e: any) { toast.error(`Saved, but photos failed: ${e.message}`); } }
+      toast.success("Vehicle added"); setOpen(false); setForm({ ...blank }); setPhotoFiles([]);
+    } catch (e: any) { toast.error(e.message || "Could not save"); }
   };
 
   return (
@@ -120,7 +126,7 @@ export default function Inventory() {
             <div className="space-y-1"><Label>Engine</Label><Input value={form.engine} onChange={set("engine")} /></div>
             <div className="space-y-1"><Label>Body style</Label><Input value={form.bodyStyle} onChange={set("bodyStyle")} /></div>
             <div className="space-y-1"><Label>Fuel</Label><Input value={form.fuelType} onChange={set("fuelType")} /></div>
-            <div className="space-y-1 col-span-2 md:col-span-3"><Label>Photo URL</Label><Input value={form.imageUrl} onChange={set("imageUrl")} placeholder="https://…  (photo upload comes with the cloud backend)" /></div>
+            <div className="space-y-1 col-span-2 md:col-span-3"><Label>Photos</Label><Input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e) => setPhotoFiles(Array.from(e.target.files ?? []))} />{photoFiles.length > 0 && <p className="text-xs text-muted-foreground">{photoFiles.length} file{photoFiles.length === 1 ? "" : "s"} selected — uploaded after the vehicle is saved</p>}</div>
             <div className="space-y-1 col-span-2 md:col-span-3"><Label>Description</Label><Textarea rows={3} value={form.description} onChange={set("description")} /></div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={save}>Add vehicle</Button></DialogFooter>

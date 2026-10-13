@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Phone, Mail, Pencil, Kanban } from "lucide-react";
+import { Plus, Search, Phone, Mail, Pencil, Kanban, Download } from "lucide-react";
+import { downloadCsv, stamp } from "@/lib/csv";
 import { toast } from "sonner";
 import { useCollection, insert, update, fullName, fmtDate, type Customer, logActivity } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
@@ -26,7 +27,11 @@ export default function Customers() {
   const [editing, setEditing] = useState<Customer | null>(null);
   const [form, setForm] = useState({ ...empty });
 
-  useEffect(() => { if (params.get("new")) { setForm({ ...empty }); setEditing(null); setOpen(true); params.delete("new"); setParams(params, { replace: true }); } }, [params, setParams]);
+  useEffect(() => {
+    if (params.get("new")) { setForm({ ...empty }); setEditing(null); setOpen(true); params.delete("new"); setParams(params, { replace: true }); }
+    const e = params.get("edit"); const c = e ? customers.find((x) => x.id === e) : undefined;
+    if (c) { setEditing(c); setForm({ ...empty, ...c } as any); setOpen(true); params.delete("edit"); setParams(params, { replace: true }); }
+  }, [params, setParams, customers]);
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -34,11 +39,13 @@ export default function Customers() {
   }, [customers, q]);
 
   const openEdit = (c: Customer) => { setEditing(c); setForm({ ...empty, ...c } as any); setOpen(true); };
-  const save = () => {
+  const save = async () => {
     if (!form.firstName.trim()) return toast.error("First name is required");
-    if (editing) { update("customers", editing.id, form as any); toast.success("Customer updated"); logActivity("update", "customer", editing.id, undefined, user?.id); }
-    else { const c = insert("customers", { ...form, ownerId: user?.id } as any); toast.success("Customer added"); logActivity("create", "customer", c.id, undefined, user?.id); }
-    setOpen(false);
+    try {
+      if (editing) { await update("customers", editing.id, form as any); toast.success("Customer updated"); logActivity("update", "customer", editing.id, undefined, user?.id); }
+      else { const c = await insert("customers", { ...form, ownerId: user?.id } as any); toast.success("Customer added"); logActivity("create", "customer", c.id, undefined, user?.id); }
+      setOpen(false);
+    } catch (e: any) { toast.error(e.message || "Could not save"); }
   };
   const set = (k: keyof typeof empty) => (e: any) => setForm({ ...form, [k]: typeof e === "string" ? e : e.target.value });
 
@@ -48,6 +55,7 @@ export default function Customers() {
         <div><h1 className="text-3xl font-black">Customers</h1><p className="text-muted-foreground">{customers.length} on file</p></div>
         <div className="flex gap-2">
           <div className="relative w-64"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Search name, phone, email" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+          <Button variant="outline" onClick={() => downloadCsv(`customers-${stamp()}`, customers.map((c) => ({ first_name: c.firstName, last_name: c.lastName, phone: c.phone, email: c.email, source: c.source, created: c.createdAt })))}><Download className="h-4 w-4 mr-1" /> Export</Button>
           <Button onClick={() => { setEditing(null); setForm({ ...empty }); setOpen(true); }}><Plus className="h-4 w-4 mr-1" /> Add customer</Button>
         </div>
       </div>
@@ -67,7 +75,7 @@ export default function Customers() {
                 const open = leads.filter((l) => l.customerId === c.id && !["sold", "lost"].includes(l.stage)).length;
                 return (
                   <tr key={c.id} className="hover:bg-muted/30">
-                    <td className="px-4 py-3 font-semibold">{fullName(c)}{c.city && <span className="block text-xs font-normal text-muted-foreground">{c.city}, {c.state}</span>}</td>
+                    <td className="px-4 py-3 font-semibold"><Link to={`/customers/${c.id}`} className="hover:text-primary hover:underline">{fullName(c)}</Link>{c.city && <span className="block text-xs font-normal text-muted-foreground">{c.city}, {c.state}</span>}</td>
                     <td className="px-4 py-3 text-muted-foreground"><div className="flex flex-col gap-0.5">{c.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{c.phone}</span>}{c.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{c.email}</span>}</div></td>
                     <td className="px-4 py-3"><Badge variant="outline">{c.source || "—"}</Badge></td>
                     <td className="px-4 py-3">{open ? <Badge>{open}</Badge> : <span className="text-muted-foreground">0</span>}</td>

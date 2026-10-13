@@ -1,0 +1,48 @@
+// Offline seed for the click audit: real Best Price tenant row + a realistic sample of records.
+const T = "11111111-1111-4111-8111-000000000001", J = "f825d6bc-cd28-4625-88b9-8bb67cb33978", ED = "ba807c6c-561e-4b49-82bf-14ac73a24673";
+const now = Date.now(), iso = (ms) => new Date(now + ms).toISOString();
+const tenant = { id: T, name: "Best Price Auto Sales", plan: "starter", slug: "bestprice", email: null, hours: { Monday: "9:00 am - 7:00 pm", Tuesday: "9:00 am - 7:00 pm", Wednesday: "9:00 am - 7:00 pm", Thursday: "9:00 am - 7:00 pm", Friday: "9:00 am - 7:00 pm", Saturday: "9:00 am - 7:00 pm", Sunday: "Appointment Only" }, phone: "978-682-8800", colors: { accent: "#FFD100", primary: "#C8102E", estimated: true, secondary: "#1F2A44" }, social: { facebook: "https://www.facebook.com/BestPriceAutoSalesInc" }, status: "active", address: { zip: "01844", city: "Methuen", state: "MA", street: "262 Lowell St" }, tagline: "Your Premier Dealership In Methuen, MA", website: "https://bestpriceautosales.net", logo_url: "https://imagescdn.dealercarsearch.com/DealerImages/19988/30031/logo3.png", financing: { notes: ["Works with all credit levels"], creditAppUrl: "https://bestpriceautosales.net/creditapp" }, created_at: "2026-10-12T22:12:56Z", intake_key: "ee04e85cfe19ede6e8a5722abab16683", legal_name: "Best Price Auto Sales Inc", onboarding: { completedBy: ED, completedByName: "Ed", role: "owner", at: "2026-10-13T00:00:00Z" }, updated_at: "2026-10-12T22:12:56Z", disclaimers: ["Price excludes taxes, title, registration, dealer documentation, acquisition fees and/or destination charges."], second_location: { zip: "01843", city: "Lawrence", state: "MA", street: "5 Merrimack St" }, inventory_source: { dealerId: "19988", platform: "Dealer Car Search" } };
+const profile = (role) => ({ id: role === "super_admin" ? J : ED, role, email: role === "super_admin" ? "jcasper@raibrollc.com" : null, username: role === "super_admin" ? "jared.casper" : "ed", full_name: role === "super_admin" ? "Jared Casper" : "Ed", is_active: true, tenant_id: T, created_at: "2026-10-12T22:12:56Z", last_seen_at: null, must_change_password: false });
+const V = (id, stock, vin, year, make, model, trim, price, miles, images, addedDaysAgo, status = "Available") => ({ id, tenantId: T, stockNumber: stock, vin, year, make, model, trim, bodyStyle: "SUV", mileage: miles, price, cost: null, exteriorColor: "Black", interiorColor: "Gray", transmission: "Automatic", drivetrain: "AWD", engine: "3.5L", fuelType: "Gasoline", mpg: "19 city / 26 hwy", images, sourceUrl: "https://bestpriceautosales.net/vdp/24223752/", description: null, features: [], status, source: "bestpriceautosales.net (Dealer Car Search) — synced", externalId: "bp-" + stock, addedAt: iso(-addedDaysAgo * 864e5), updatedAt: iso(0) });
+const img = (m, f) => `https://imagescdn.dealercarsearch.com/Media/19988/${m}/${f}.jpg`;
+const vehicles = [
+  V("528c0da7-d581-4559-bf41-254fe69b020f", "009413", "5FNYF6H9XJB009413", 2018, "Honda", "Pilot", "Touring AWD", 18988, 111679, [img(24223752, "639239557419155154"), img(24223752, "639239557517460548")], 3),
+  V("e3c82a75-ff30-4df3-8c03-27f7067837fd", "528534", "5N1DL0MM7HC528534", 2017, "Infiniti", "QX60", "AWD", 8495, 149800, [img(24351999, "639272362807010091")], 95),
+  V("faaeeea0-d8e9-49b5-96f0-16b4b54098eb", "048331", "KM8JFCA19NU048331", 2022, "Hyundai", "Tucson Hybrid", "SEL Convenience AWD", 25988, 65124, [img(23732095, "639108345792364304")], 12),
+  V("88af7b52-a245-4e7d-a4f2-59da4d62013a", "224992", "WDDWF4KB7HR224992", 2017, "Mercedes-Benz", "C-Class", "C 300 4MATIC Sedan", null, 109137, [], 0),
+  V("d597c69d-19a9-4080-8567-c8130544b8d5", "618868", "1C4RJFBG5KC618868", 2019, "Jeep", "Grand Cherokee", "Limited X 4x4", 14988, 121978, [], 40, "Pending"),
+  V("c1dca085-37ce-4ca9-97c6-b353a295bd5b", "532915", "2HKYF18595H532915", 2005, "Honda", "Pilot", "EX-L AT", 3988, 199397, [img(24068736, "639224031363786426")], 70, "Sold"),
+];
+const C = (id, f, l, phone, email, src, daysAgo, ownerId) => ({ id, tenantId: T, createdAt: iso(-daysAgo * 864e5), updatedAt: iso(-daysAgo * 864e5), firstName: f, lastName: l, phone, email, city: "Methuen", state: "MA", source: src, ownerId });
+const customers = [
+  C("c1000000-0000-4000-8000-000000000001", "Maria", "Santos", "978-555-0101", "maria@example.com", "Website", 2, ED),
+  C("c1000000-0000-4000-8000-000000000002", "Devin", "Walsh", "603-555-0102", "", "Walk-in", 9, J),
+  C("c1000000-0000-4000-8000-000000000003", "Priya", "Nair", "", "priya@example.com", "CarGurus", 30, ED),
+  C("cdcd541e-f5ee-4ba1-8e31-8cedb7efc3aa", "Intake", "Test", "978-555-0199", "intake.test@example.com", "Website", 1, undefined),
+];
+const leads = [
+  { id: "l1000000-0000-4000-8000-000000000001", tenantId: T, createdAt: iso(-40 * 60e3), updatedAt: iso(-40 * 60e3), customerId: customers[0].id, vehicleId: vehicles[0].id, stage: "new", source: "Website", assignedTo: undefined, notes: "Is the Pilot still available?", sourceUrl: "https://bestpriceautosales.net/vdp/24223752/" },
+  { id: "l1000000-0000-4000-8000-000000000002", tenantId: T, createdAt: iso(-5 * 864e5), updatedAt: iso(-1 * 864e5), customerId: customers[1].id, vehicleId: vehicles[2].id, stage: "appointment", source: "Walk-in", assignedTo: J },
+  { id: "l1000000-0000-4000-8000-000000000003", tenantId: T, createdAt: iso(-20 * 864e5), updatedAt: iso(-2 * 864e5), customerId: customers[2].id, vehicleId: vehicles[4].id, stage: "negotiating", source: "CarGurus", assignedTo: ED },
+  { id: "30fe87b9-1861-4a42-8c5c-863729be83c0", tenantId: T, createdAt: iso(-1 * 864e5), updatedAt: iso(-1 * 864e5), customerId: customers[3].id, vehicleId: undefined, stage: "lost", source: "Website", notes: "TEST — safe to delete" },
+];
+const deals = [{ id: "d1000000-0000-4000-8000-000000000001", tenantId: T, createdAt: iso(-2 * 864e5), updatedAt: iso(-1 * 864e5), customerId: customers[2].id, vehicleId: vehicles[4].id, salespersonId: ED, status: "approved", sellingPrice: 14988, cashDown: 2995, tradeAllowance: 0, tradePayoff: 0, tradeAcv: 0, docFee: 399, taxRate: 6.25, nonTaxableFees: 0, warrantyRetail: 1995, warrantyCost: 900, gapRetail: 695, gapCost: 250, termMonths: 60, apr: 9.9, bankFee: 0, dealerReserve: 300, pack: 0, monthlyPayment: 345.12, amountFinanced: 15766, frontEndGross: 2100, backEndGross: 1840, totalGross: 3940 }];
+const tasks = [
+  { id: "t1000000-0000-4000-8000-000000000001", tenantId: T, createdAt: iso(-40 * 60e3), updatedAt: iso(-40 * 60e3), title: "Respond to new lead: Maria Santos", dueAt: iso(-25 * 60e3), status: "open", priority: "high", assignedTo: undefined, relatedType: "lead", relatedId: leads[0].id },
+  { id: "t1000000-0000-4000-8000-000000000002", tenantId: T, createdAt: iso(-864e5), updatedAt: iso(-864e5), title: "Call Devin about financing", dueAt: iso(3 * 3600e3), status: "open", priority: "normal", assignedTo: J, relatedType: "customer", relatedId: customers[1].id },
+  { id: "t1000000-0000-4000-8000-000000000003", tenantId: T, createdAt: iso(-3 * 864e5), updatedAt: iso(-864e5), title: "Order plates for Priya", dueAt: iso(-864e5), status: "done", priority: "normal", assignedTo: ED },
+];
+const appointments = [
+  { id: "a1000000-0000-4000-8000-000000000001", tenantId: T, createdAt: iso(-864e5), updatedAt: iso(-864e5), customerId: customers[1].id, vehicleId: vehicles[2].id, type: "test_drive", startsAt: iso(2 * 3600e3), status: "scheduled", assignedTo: J },
+  { id: "a1000000-0000-4000-8000-000000000002", tenantId: T, createdAt: iso(-864e5), updatedAt: iso(-864e5), customerId: customers[2].id, vehicleId: vehicles[4].id, type: "delivery", startsAt: iso(2 * 864e5), status: "confirmed", assignedTo: ED },
+];
+const activity = [
+  { id: "ac100000-0000-4000-8000-000000000001", tenantId: T, createdAt: iso(-40 * 60e3), updatedAt: iso(-40 * 60e3), userId: undefined, action: "lead_intake", entity: "lead", entityId: leads[0].id, details: undefined },
+  { id: "ac100000-0000-4000-8000-000000000002", tenantId: T, createdAt: iso(-864e5), updatedAt: iso(-864e5), userId: J, action: "note", entity: "customer", entityId: customers[1].id, details: "Wants under $400/mo, trade is a 2014 Civic" },
+];
+module.exports = function seed(role) {
+  const p = profile(role);
+  const session = { access_token: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4IiwiYXVkIjoiYXV0aGVudGljYXRlZCJ9.c2ln", refresh_token: "offline-audit", token_type: "bearer", expires_in: 36000, expires_at: Math.floor(now / 1000) + 36000, user: { id: p.id, aud: "authenticated", role: "authenticated", email: p.username + "@login.carsalessoftware.com", app_metadata: {}, user_metadata: {}, created_at: p.created_at } };
+  const ls = { "cso-auth": JSON.stringify(session), "cso:me": JSON.stringify({ profile: p, tenant, location: null, aal: "aal1", locations: [{ id: "loc00000-0000-4000-8000-000000000001", tenant_id: T, slug: "methuen", name: "Methuen", brand_name: "Best Price Auto Sales", logo_url: tenant.logo_url, phone: "978-682-8800", address: tenant.address, is_default: true, active: true }, { id: "loc00000-0000-4000-8000-000000000002", tenant_id: T, slug: "lawrence", name: "Lawrence", brand_name: "Best Price Auto Sales", logo_url: null, phone: "978-682-8800", address: tenant.second_location, is_default: false, active: true }] }), cso_tenant_id: "bestprice", "cso:bestprice:vehicles": JSON.stringify(vehicles), "cso:bestprice:customers": JSON.stringify(customers), "cso:bestprice:leads": JSON.stringify(leads), "cso:bestprice:deals": JSON.stringify(deals), "cso:bestprice:tasks": JSON.stringify(tasks), "cso:bestprice:appointments": JSON.stringify(appointments), "cso:bestprice:activity": JSON.stringify(activity) };
+  return ls;
+};

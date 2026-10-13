@@ -20,11 +20,27 @@ const BUNDLED_VERSION = require("./package.json").version;
 // Auto-update: the shell downloads the latest published web build (manifest + files) into userData
 // and serves it instead of the bundled copy. Install once; every publish shows up on next launch.
 const DEFAULT_UPDATE_URL = "https://github.com/jic52194/carsales-desktop/releases/latest/download/manifest.json";
+// The live web app. Set "remoteUrl": "" in config.json to force the downloaded bundle instead.
+const DEFAULT_LIVE_URL = "https://app.carsalessoftware.com/";
 let DIST_DIR = BUNDLED_DIST;
 let activeVersion = BUNDLED_VERSION;
 
 app.setName(APP_NAME);
 app.setAppUserModelId("com.carsalessoftware.desktop");
+// Own profile folder (…/CarSalesSoftware/CarSales AI OS) so a stale pre-release portable build that is still
+// running can never hold our single-instance lock or share our data.
+try { app.setPath("userData", path.join(app.getPath("appData"), "CarSalesSoftware", APP_NAME)); } catch {}
+
+// One-time cleanup: retire the pre-release portable build if it is still running (Windows only; path-specific).
+function retireLegacyPortable() {
+  if (process.platform !== "win32") return;
+  try {
+    const { execFile } = require("child_process");
+    const ps = "Get-Process | Where-Object { $_.Path -and $_.Path -like '*CarSalesAIOS-win64-portable*' } | Stop-Process -Force";
+    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps], { windowsHide: true, timeout: 8000 }, () => {});
+  } catch {}
+}
+retireLegacyPortable();
 
 // ---------- config ----------
 function readConfig() {
@@ -118,6 +134,7 @@ let quitting = false;
 
 function createWindow() {
   const cfg = readConfig();
+  if (cfg.remoteUrl === undefined) cfg.remoteUrl = DEFAULT_LIVE_URL;
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -162,21 +179,64 @@ function createWindow() {
     }
   });
 
-  if (cfg.remoteUrl) {
-    mainWindow.loadURL(cfg.remoteUrl);
-    mainWindow.webContents.on("did-fail-load", (_e, code, desc) => {
-      if (code === -3) return; // aborted (navigation) — ignore
-      dialog.showMessageBox(mainWindow, {
-        type: "warning",
-        title: APP_NAME,
-        message: "Could not reach the cloud app",
-        detail: `${cfg.remoteUrl}\n${desc} (${code})\n\nFalling back to the built-in demo.`,
-      });
-      mainWindow.loadURL(`${APP_SCHEME}://${APP_HOST}/`);
+  // TimeHub model: load the LIVE site so every web publish is instant. If the site can't be reached
+  // (offline, DNS not ready yet), fall back silently to the last downloaded bundle.
+  const live = cfg.remoteUrl;
+  if (live) {
+    probe(live).then((ok) => {
+      if (ok) {
+        mainWindow.loadURL(live);
+        mainWindow.webContents.on("did-fail-load", (_e, code, _desc, url, isMain) => {
+          if (code === -3 || !isMain) return;
+          mainWindow.loadURL(`${APP_SCHEME}://${APP_HOST}/`);
+        });
+        startLiveWatch(live);
+      } else {
+        mainWindow.loadURL(`${APP_SCHEME}://${APP_HOST}/`);
+      }
     });
   } else {
     mainWindow.loadURL(`${APP_SCHEME}://${APP_HOST}/`);
   }
+}
+
+/** Can we reach the live site right now? (3 s budget) */
+async function probe(url) {
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 3000);
+    const r = await net.fetch(url + (url.includes("?") ? "&" : "?") + "_probe=" + Date.now(), { method: "GET", signal: ctl.signal, cache: "no-store" });
+    clearTimeout(t);
+    return r.ok;
+  } catch { return false; }
+}
+
+/** Re-check the live index.html every 60 s and on focus; when the bundle hash changes, reload once the user is idle. */
+let liveHash = null, liveTimer = null;
+function startLiveWatch(url) {
+  const check = async () => {
+    try {
+      const r = await net.fetch(url + "?_v=" + Date.now(), { cache: "no-store" });
+      const html = await r.text();
+      const m = html.match(/assets\/index-([A-Za-z0-9_-]+)\.js/);
+      const h = m ? m[1] : null;
+      if (!h) return;
+      if (liveHash === null) { liveHash = h; return; }
+      if (h !== liveHash) {
+        liveHash = h;
+        const tryReload = () => {
+          const idle = powerMonitor.getSystemIdleTime();
+          if (!mainWindow) return;
+          if (idle >= 60 || !mainWindow.isVisible() || !mainWindow.isFocused()) mainWindow.webContents.reload();
+          else setTimeout(tryReload, 30000);
+        };
+        tryReload();
+      }
+    } catch {}
+  };
+  if (liveTimer) clearInterval(liveTimer);
+  liveTimer = setInterval(check, 60000);
+  check();
+  if (mainWindow) mainWindow.on("focus", check);
 }
 
 function showWindow() {
@@ -217,7 +277,7 @@ ipcMain.handle("native:info", () => ({
   version: app.getVersion(),
   webVersion: activeVersion,
   platform: process.platform,
-  mode: readConfig().remoteUrl ? "cloud" : "local",
+  mode: (readConfig().remoteUrl === undefined ? DEFAULT_LIVE_URL : readConfig().remoteUrl) ? "cloud" : "local",
 }));
 ipcMain.handle("native:idleSeconds", () => powerMonitor.getSystemIdleTime());
 ipcMain.handle("native:setRemoteUrl", (_e, url) => {
