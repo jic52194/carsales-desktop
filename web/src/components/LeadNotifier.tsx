@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -11,10 +11,12 @@ import { listRecords } from "@/lib/records";
 export function LeadNotifier() {
   const { user } = useAuth();
   const nav = useNavigate();
+  const [gen, setGen] = useState(0); // bump to rebuild the channel after a drop
   useEffect(() => {
     if (!user) return;
+    let alive = true; let retry: ReturnType<typeof setTimeout> | undefined;
     if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
-    const ch = supabase.channel("leads-live")
+    const ch = supabase.channel(`leads-live-${gen}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "leads" }, async (payload) => {
         const row: any = payload.new;
         const pref = listRecords<any>("notif_pref").find((r) => r.data?.userId === user.id)?.data;
@@ -29,8 +31,15 @@ export function LeadNotifier() {
         toast.success(`New lead: ${who}`, { description: what, action: { label: "Open", onClick: () => nav("/leads") }, duration: 15000 });
         try { if ("Notification" in window && Notification.permission === "granted") { const n = new Notification(`New lead — ${who}`, { body: `${what}${row.message ? `\n"${String(row.message).slice(0, 120)}"` : ""}`, tag: `lead-${row.id}` }); n.onclick = () => { window.focus(); nav("/leads"); }; } } catch {}
       })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [user, nav]);
+      .subscribe((status) => {
+        // self-heal: if the live channel drops (sleep, network blip, token refresh) rebuild it
+        if (alive && (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED")) {
+          retry = setTimeout(() => { if (alive) setGen((g) => g + 1); }, 3000 + Math.random() * 2000);
+        }
+      });
+    const onWake = () => { if (document.visibilityState === "visible" && ch.state !== "joined") setGen((g) => g + 1); };
+    document.addEventListener("visibilitychange", onWake);
+    return () => { alive = false; if (retry) clearTimeout(retry); document.removeEventListener("visibilitychange", onWake); supabase.removeChannel(ch); };
+  }, [user, nav, gen]);
   return null;
 }

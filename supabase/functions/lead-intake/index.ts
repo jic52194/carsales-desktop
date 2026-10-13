@@ -5,7 +5,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
-const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type, x-intake-key", "access-control-allow-methods": "POST, OPTIONS", "content-type": "application/json" };
+const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type, x-intake-key, apikey, authorization, x-client-info", "access-control-allow-methods": "POST, OPTIONS", "content-type": "application/json" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: cors });
 const clean = (v: unknown, max = 200) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 

@@ -63,7 +63,7 @@ export default function VideoMessages() {
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div><h1 className="text-3xl font-black">Video Messages</h1><p className="text-muted-foreground">Walkaround and thank-you videos you've sent, linked to the customer and the car.</p></div>
+        <div><h1 className="text-3xl font-black">Video Walkarounds</h1><p className="text-muted-foreground">Walkaround and thank-you videos you've sent, linked to the customer and the car.</p></div>
         <Button onClick={() => setOpen(true)} disabled={customers.length === 0}><Plus className="h-4 w-4 mr-1" /> Log a video</Button>
       </div>
 

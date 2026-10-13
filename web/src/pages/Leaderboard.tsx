@@ -66,7 +66,7 @@ export default function Leaderboard() {
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div><h1 className="text-3xl font-black">Leaderboard</h1><p className="text-muted-foreground">{monthLabel(month)} · delivered units, gross, shows, and logged calls</p></div>
+        <div><h1 className="text-3xl font-black">Leaderboards &amp; Spiffs</h1><p className="text-muted-foreground">{monthLabel(month)} · delivered units, gross, shows, and logged calls</p></div>
         <div className="flex gap-2">
           <Select value={month} onValueChange={setMonth}><SelectTrigger className="w-44"><SelectValue /></SelectTrigger><SelectContent>{months.map((m) => <SelectItem key={m} value={m}>{monthLabel(m)}</SelectItem>)}</SelectContent></Select>
           {canManage && <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4 mr-1" /> Spiff</Button>}

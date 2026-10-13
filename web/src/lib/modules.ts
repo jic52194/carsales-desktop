@@ -37,10 +37,10 @@ export const MODULES: Module[] = [
   { path: "/test-drives", label: "Test Drives", icon: KeyRound, group: "Sales & CRM", roles: [...SALES, "porter"] },
   { path: "/appraisals", label: "Appraisals", icon: Car, group: "Sales & CRM", roles: [...SALES, "inventory"] },
   { path: "/videos", label: "Video Walkarounds", icon: Video, group: "Sales & CRM", roles: SALES },
-  { path: "/templates", label: "SMS Templates", icon: MessageSquareText, group: "Sales & CRM", roles: SALES },
+  { path: "/templates", label: "Templates", icon: MessageSquareText, group: "Sales & CRM", roles: SALES },
   // Inventory & Ops
   { path: "/inventory", label: "Inventory", icon: Car, group: "Inventory & Ops", roles: ALL },
-  { path: "/pricing", label: "AI Pricing", icon: Tag, group: "Inventory & Ops", roles: INV },
+  { path: "/pricing", label: "Pricing Desk", icon: Tag, group: "Inventory & Ops", roles: INV },
   { path: "/aging", label: "Aging Inventory", icon: Hourglass, group: "Inventory & Ops", roles: INV },
   { path: "/acquisition", label: "Acquisition", icon: ShoppingCart, group: "Inventory & Ops", roles: [...INV, "sales"] },
   { path: "/auctions", label: "Auctions", icon: Gavel, group: "Inventory & Ops", roles: INV },
@@ -53,7 +53,7 @@ export const MODULES: Module[] = [
   // F&I & Compliance
   { path: "/credit-apps", label: "Credit Apps", icon: FileText, group: "F&I & Compliance", roles: SALES },
   { path: "/lenders", label: "Lenders", icon: Landmark, group: "F&I & Compliance", roles: FI },
-  { path: "/warranty", label: "Warranty & Ins.", icon: ShieldCheck, group: "F&I & Compliance", roles: [...FI, "service"] },
+  { path: "/warranty", label: "Warranty & Contracts", icon: ShieldCheck, group: "F&I & Compliance", roles: [...FI, "service"] },
   { path: "/compliance", label: "Compliance", icon: ShieldCheck, group: "F&I & Compliance", roles: FI },
   { path: "/title-reg", label: "Title & Reg", icon: FileBadge, group: "F&I & Compliance", roles: FI },
   // Service
@@ -70,7 +70,7 @@ export const MODULES: Module[] = [
   { path: "/pay-plans", label: "Pay Plans", icon: Calculator, group: "Back Office", roles: [...ADMIN, "sales"] },
   // Marketing
   { path: "/campaigns", label: "Campaigns", icon: Megaphone, group: "Marketing", roles: [...MGMT, "web"] },
-  { path: "/website", label: "Website CMS", icon: Globe, group: "Marketing", roles: [...MGMT, "web"] },
+  { path: "/website", label: "Website", icon: Globe, group: "Marketing", roles: [...MGMT, "web"] },
   // Insights
   { path: "/command", label: "Command Center", icon: Gauge, group: "Insights", roles: MGMT },
   { path: "/doc", label: "Daily Op Control", icon: ClipboardList, group: "Insights", roles: MGMT },

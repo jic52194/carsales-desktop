@@ -82,7 +82,7 @@ export default function TextingTemplates() {
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div><h1 className="text-3xl font-black">Message Templates</h1><p className="text-muted-foreground">Reusable texts, emails and phone scripts with merge fields. Preview with a real customer, then send from your phone or email.</p></div>
+        <div><h1 className="text-3xl font-black">Templates</h1><p className="text-muted-foreground">Reusable texts, emails and phone scripts with merge fields. Preview with a real customer, then send them from the dealership (GoHighLevel) or your phone.</p></div>
         {canEdit && <Button onClick={startNew}><Plus className="h-4 w-4 mr-1" /> New template</Button>}
       </div>
 

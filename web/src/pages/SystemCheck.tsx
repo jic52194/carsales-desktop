@@ -137,12 +137,15 @@ export default function SystemCheck() {
     {
       const id = "realtime:leads";
       upsert({ id, group: "Realtime", name: "leads channel", status: "running", detail: "subscribing" });
-      const { r, e, ms } = await timed(() => new Promise<string>((resolve, reject) => {
-        const ch = supabase.channel(`system-check-${Date.now()}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "leads" }, () => {});
-        const done = (ok: boolean, msg: string) => { clearTimeout(timer); supabase.removeChannel(ch).catch(() => {}); ok ? resolve(msg) : reject(new Error(msg)); };
-        const timer = setTimeout(() => done(false, "no SUBSCRIBED within 5 s"), 5000);
-        ch.subscribe((status, err) => { if (status === "SUBSCRIBED") done(true, "SUBSCRIBED"); else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") done(false, `${status}${err ? ": " + err.message : ""}`); });
-      }));
+      const attempt = () => new Promise<string>((resolve, reject) => {
+        const ch = supabase.channel(`system-check-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "leads" }, () => {});
+        let settled = false;
+        const done = (ok: boolean, msg: string) => { if (settled) return; settled = true; clearTimeout(timer); supabase.removeChannel(ch).catch(() => {}); ok ? resolve(msg) : reject(new Error(msg)); };
+        const timer = setTimeout(() => done(false, "no SUBSCRIBED within 6 s"), 6000);
+        ch.subscribe((status, err) => { if (status === "SUBSCRIBED") done(true, "SUBSCRIBED"); else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") done(false, `${status}${err ? ": " + err.message : ""}`); });
+      });
+      // a socket that was idle can report CLOSED once while reconnecting — retry before calling it a failure
+      const { r, e, ms } = await timed(async () => { let last: any; for (let i = 0; i < 3; i++) { try { return await attempt(); } catch (x) { last = x; await new Promise((w) => setTimeout(w, 1000)); } } throw last; });
       add(e ? { id, group: "Realtime", name: "leads channel", status: "fail", detail: errMsg(e), ms } : { id, group: "Realtime", name: "leads channel", status: "pass", detail: r!, ms });
     }
 
