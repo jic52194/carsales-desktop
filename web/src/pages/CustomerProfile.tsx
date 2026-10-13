@@ -4,11 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Phone, MessageSquare, Mail, MapPin, Kanban, Calendar, Calculator, ListTodo, ArrowLeft, Pencil, StickyNote, FileSignature, Car } from "lucide-react";
+import { Phone, MessageSquare, Mail, MapPin, Kanban, Calendar, Calculator, ListTodo, ArrowLeft, Pencil, StickyNote, FileSignature, Car, ArrowDownLeft, ArrowUpRight, CalendarCheck, RefreshCw, Loader2, Sparkles, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { useCollection, insert, update, fullName, fmtDateTime, money, type Lead, type Deal, type Appointment, type Task, type Activity } from "@/lib/store";
 import { useInventory, vTitle } from "@/lib/inventory";
 import { useAuth, useUsers } from "@/lib/auth";
+import { useRecords } from "@/lib/records";
+import { askAi, aiErrorMessage } from "@/lib/ai";
+import { useGhlStatus, ghlUpsertContact, ghlErrorMessage, isInbound, type MessageRecord, type GhlChannel } from "@/lib/ghl";
+import { ComposeMessage } from "@/components/ComposeMessage";
+import { BookGhlDialog } from "@/components/BookGhlDialog";
 
 type Item = { at: string; kind: string; icon: any; title: string; sub?: string; to?: string; tone?: string };
 
@@ -26,6 +31,12 @@ export default function CustomerProfile() {
   const inventory = useInventory();
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const messages = useRecords<MessageRecord>("message");
+  const ghl = useGhlStatus();
+  const [compose, setCompose] = useState<GhlChannel | null>(null);
+  const [booking, setBooking] = useState(false);
+  const [sync, setSync] = useState<{ busy: boolean; contactId?: string; error?: string }>({ busy: false });
+  const [summary, setSummary] = useState<{ busy: boolean; text?: string; error?: string }>({ busy: false });
 
   const c = customers.find((x) => x.id === id);
   const who = (uid?: string) => users.find((u) => u.id === uid)?.fullName;
@@ -38,10 +49,11 @@ export default function CustomerProfile() {
     deals.filter((d: Deal) => d.customerId === c.id).forEach((d) => items.push({ at: d.createdAt, kind: "Deal", icon: FileSignature, title: `Deal ${d.status.replace("_", " ")} — ${money(d.sellingPrice)}`, sub: [veh(d.vehicleId), `${money(d.monthlyPayment)}/mo × ${d.termMonths}`, `${money(d.totalGross)} gross`].filter(Boolean).join(" · "), to: `/desking?deal=${d.id}` }));
     appts.filter((a: Appointment) => a.customerId === c.id).forEach((a) => items.push({ at: a.startsAt, kind: "Appointment", icon: Calendar, title: `${a.type.replace("_", " ")} — ${a.status.replace("_", " ")}`, sub: [veh(a.vehicleId), who(a.assignedTo)].filter(Boolean).join(" · "), to: "/appointments" }));
     tasks.filter((t: Task) => t.relatedType === "customer" && t.relatedId === c.id).forEach((t) => items.push({ at: t.dueAt || t.createdAt, kind: "Task", icon: ListTodo, title: t.title, sub: `${t.status}${who(t.assignedTo) ? ` · ${who(t.assignedTo)}` : ""}`, to: "/tasks" }));
+    messages.filter((m) => m.data?.customerId === c.id).forEach((m) => { const d = m.data; const inb = isInbound(d); const ch = d.channel === "email" ? "Email" : d.channel === "call" ? "Call" : d.channel === "note" ? "Note" : "Text"; items.push({ at: d.at, kind: ch, icon: d.channel === "note" ? StickyNote : inb ? ArrowDownLeft : ArrowUpRight, title: `${inb ? `${ch} from ${c.firstName}` : d.channel === "note" ? "Note" : `${ch} sent`}: ${d.subject ? `${d.subject} — ` : ""}${d.body.length > 160 ? d.body.slice(0, 160) + "…" : d.body}`, sub: [inb ? undefined : who(d.by ?? undefined), d.via === "ghl" ? "via GoHighLevel" : undefined].filter(Boolean).join(" · ") || undefined, to: "/inbox", tone: inb ? "text-primary" : "" }); });
     activity.filter((a: Activity) => a.entity === "customer" && a.entityId === c.id && a.action === "note").forEach((a) => items.push({ at: a.createdAt, kind: "Note", icon: StickyNote, title: a.details || "", sub: who(a.userId) }));
     items.push({ at: c.createdAt, kind: "Customer", icon: Pencil, title: `Added as a customer${c.source ? ` (${c.source})` : ""}`, sub: who(c.ownerId) });
     return items.sort((a, b) => b.at.localeCompare(a.at));
-  }, [c, leads, deals, appts, tasks, activity, inventory, users]);
+  }, [c, leads, deals, appts, tasks, activity, inventory, users, messages]);
 
   if (!c) return <div className="p-8 text-center text-muted-foreground">Customer not found. <Link to="/customers" className="text-primary underline">Back to customers</Link></div>;
 
@@ -57,6 +69,17 @@ export default function CustomerProfile() {
     try { await insert("tasks", { title: `Follow up with ${fullName(c)}`, dueAt: new Date(Date.now() + 24 * 3600e3).toISOString(), status: "open", priority: "normal", assignedTo: user?.id, relatedType: "customer", relatedId: c.id } as any); toast.success("Follow-up set for tomorrow"); }
     catch (e: any) { toast.error(e.message); }
   };
+  const syncGhl = async () => {
+    setSync({ busy: true });
+    try { const r = await ghlUpsertContact(c.id); setSync({ busy: false, contactId: r.contactId }); toast.success("Synced to GoHighLevel"); }
+    catch (e) { setSync({ busy: false, error: ghlErrorMessage(e) }); }
+  };
+  const summarize = async () => {
+    setSummary({ busy: true });
+    try { const text = await askAi("customer_summary", { context: { customerId: c.id } }); setSummary({ busy: false, text: text || undefined, error: text ? undefined : "The assistant returned nothing — try again." }); }
+    catch (e) { setSummary({ busy: false, error: aiErrorMessage(e) }); }
+  };
+  const vehicleOfInterest = leads.find((l) => l.customerId === c.id && l.vehicleId && !["sold", "lost"].includes(l.stage))?.vehicleId;
   const setOwner = async () => { try { await update("customers", c.id, { ownerId: user?.id } as any); toast.success("You now own this customer"); } catch (e: any) { toast.error(e.message); } };
 
   return (
@@ -76,19 +99,32 @@ export default function CustomerProfile() {
             {bought.length > 0 && <Badge className="bg-emerald-600">{bought.length} purchase{bought.length > 1 ? "s" : ""}</Badge>}
             <Badge variant="secondary">Owner: {who(c.ownerId) || "unassigned"}</Badge>
             {c.ownerId !== user?.id && <button className="text-xs text-primary underline" onClick={setOwner}>take ownership</button>}
+            {ghl.connected && (sync.contactId
+              ? <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-300" title={`GHL contact ${sync.contactId}`}><CheckCircle2 className="h-3 w-3 mr-1" /> Synced to GoHighLevel</Badge>
+              : <button className="text-xs text-primary underline inline-flex items-center gap-1 disabled:opacity-50" onClick={syncGhl} disabled={sync.busy || (!c.phone && !c.email)} title={!c.phone && !c.email ? "Needs a phone or email" : "Create or match this customer in GoHighLevel"}>{sync.busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Sync to GHL</button>)}
           </div>
+          {sync.error && <p className="text-xs text-destructive mt-1">{sync.error}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
           {c.phone && <Button asChild variant="outline" size="sm"><a href={`tel:${tel}`}><Phone className="h-4 w-4 mr-1" /> Call</a></Button>}
-          {c.phone && <Button asChild variant="outline" size="sm"><a href={`sms:${tel}`}><MessageSquare className="h-4 w-4 mr-1" /> Text</a></Button>}
-          {c.email && <Button asChild variant="outline" size="sm"><a href={`mailto:${c.email}`}><Mail className="h-4 w-4 mr-1" /> Email</a></Button>}
+          <Button variant="outline" size="sm" onClick={() => setCompose("sms")} disabled={!c.phone} title={c.phone ? "" : "No phone number on file"}><MessageSquare className="h-4 w-4 mr-1" /> Text</Button>
+          <Button variant="outline" size="sm" onClick={() => setCompose("email")} disabled={!c.email} title={c.email ? "" : "No email on file"}><Mail className="h-4 w-4 mr-1" /> Email</Button>
+          <Button variant="outline" size="sm" onClick={summarize} disabled={summary.busy}>{summary.busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />} Summarize</Button>
           <Button asChild variant="outline" size="sm"><Link to={`/customers?edit=${c.id}`}><Pencil className="h-4 w-4 mr-1" /> Edit</Link></Button>
         </div>
       </div>
 
-      <div className="grid md:grid-cols-4 gap-2">
+      {(summary.text || summary.error) && (
+        <Card className={summary.error ? "border-amber-300" : "border-primary/30"}>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0"><CardTitle className="text-base flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> AI summary</CardTitle><Button size="sm" variant="ghost" onClick={() => setSummary({ busy: false })}>Dismiss</Button></CardHeader>
+          <CardContent className={`text-sm whitespace-pre-wrap ${summary.error ? "text-amber-900" : ""}`}>{summary.error ?? summary.text}</CardContent>
+        </Card>
+      )}
+
+      <div className={`grid gap-2 ${ghl.connected ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
         <Button asChild variant="secondary"><Link to={`/leads?customer=${c.id}`}><Kanban className="h-4 w-4 mr-1" /> New lead</Link></Button>
         <Button asChild variant="secondary"><Link to={`/appointments?customer=${c.id}`}><Calendar className="h-4 w-4 mr-1" /> Book appointment</Link></Button>
+        {ghl.connected && <Button variant="secondary" onClick={() => setBooking(true)}><CalendarCheck className="h-4 w-4 mr-1" /> Book in GHL calendar</Button>}
         <Button asChild variant="secondary"><Link to={`/desking?customer=${c.id}`}><Calculator className="h-4 w-4 mr-1" /> Desk a deal</Link></Button>
         <Button variant="secondary" onClick={addFollowUp}><ListTodo className="h-4 w-4 mr-1" /> Follow up tomorrow</Button>
       </div>
@@ -120,6 +156,9 @@ export default function CustomerProfile() {
           {c.notes && <Card><CardHeader><CardTitle className="text-base">Profile notes</CardTitle></CardHeader><CardContent className="text-sm whitespace-pre-wrap">{c.notes}</CardContent></Card>}
         </div>
       </div>
+
+      <ComposeMessage open={!!compose} onOpenChange={(o) => !o && setCompose(null)} customer={c} defaultChannel={compose ?? "sms"} vehicleId={vehicleOfInterest} />
+      <BookGhlDialog open={booking} onOpenChange={setBooking} customerId={c.id} vehicleId={vehicleOfInterest} />
     </div>
   );
 }

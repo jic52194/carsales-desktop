@@ -16,7 +16,8 @@ import { useInventory, vTitle } from "@/lib/inventory";
 import { useRecords, addRecord, removeRecord, type Rec } from "@/lib/records";
 import { useAuth, useUsers } from "@/lib/auth";
 import { useTenant } from "@/lib/tenant";
-import { smsHref, mailtoHref } from "@/pages/TextingTemplates";
+import { ComposeMessage } from "@/components/ComposeMessage";
+import type { Customer } from "@/lib/store";
 
 export interface VideoMessage { customerId: string; vehicleId: string; url: string; note: string; sentAt: string; by?: string }
 const blank = { customerId: "", vehicleId: "", url: "", note: "" };
@@ -34,6 +35,7 @@ export default function VideoMessages() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...blank });
   const [toDelete, setToDelete] = useState<Rec<VideoMessage> | null>(null);
+  const [compose, setCompose] = useState<{ customer: Customer; channel: "sms" | "email"; body: string; subject: string; vehicleId?: string } | null>(null);
 
   const rows = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -83,8 +85,8 @@ export default function VideoMessages() {
               <a href={v.data.url} target="_blank" rel="noreferrer" className="text-xs text-primary underline inline-flex items-center gap-1 break-all"><ExternalLink className="h-3 w-3 shrink-0" />{v.data.url}</a>
               {v.data.note && <p className="text-sm text-muted-foreground whitespace-pre-wrap">{v.data.note}</p>}
               <div className="flex flex-wrap gap-2 pt-1">
-                {c?.phone ? <Button asChild size="sm"><a href={smsHref(c.phone, text)} onClick={() => logActivity("sms", "customer", c.id, "Video link", user?.id)}><MessageSquare className="h-4 w-4 mr-1" /> Text link</a></Button> : <Button size="sm" disabled><MessageSquare className="h-4 w-4 mr-1" /> No phone</Button>}
-                {c?.email && <Button asChild size="sm" variant="outline"><a href={mailtoHref(c.email, veh ? `Video: ${vTitle(veh)}` : "A quick video for you", text)}><Mail className="h-4 w-4 mr-1" /> Email</a></Button>}
+                {c?.phone ? <Button size="sm" onClick={() => setCompose({ customer: c, channel: "sms", body: text, subject: "", vehicleId: veh?.id })}><MessageSquare className="h-4 w-4 mr-1" /> Text link</Button> : <Button size="sm" disabled><MessageSquare className="h-4 w-4 mr-1" /> No phone</Button>}
+                {c?.email && <Button size="sm" variant="outline" onClick={() => setCompose({ customer: c, channel: "email", body: text, subject: veh ? `Video: ${vTitle(veh)}` : "A quick video for you", vehicleId: veh?.id })}><Mail className="h-4 w-4 mr-1" /> Email</Button>}
                 <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(v.data.url); toast.success("Link copied"); }}><Copy className="h-4 w-4" /></Button>
                 <Button size="sm" variant="ghost" onClick={() => setToDelete(v)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
               </div>
@@ -105,6 +107,8 @@ export default function VideoMessages() {
           <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={save}>Save</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ComposeMessage open={!!compose} onOpenChange={(o) => !o && setCompose(null)} customer={compose?.customer} defaultChannel={compose?.channel} defaultBody={compose?.body} defaultSubject={compose?.subject} vehicleId={compose?.vehicleId} title="Send video link" />
 
       <AlertDialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
         <AlertDialogContent>

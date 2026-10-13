@@ -9,13 +9,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
-import { Plus, Loader2, PackagePlus, Trash2 } from "lucide-react";
+import { Plus, Loader2, PackagePlus, Trash2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useCollection, fullName, money, fmtDate, logActivity } from "@/lib/store";
 import { useInventory, upsertVehicle, vTitle } from "@/lib/inventory";
 import { useRecords, addRecord, updateRecord, removeRecord, type Rec } from "@/lib/records";
 import { useAuth } from "@/lib/auth";
 import { getTenantId } from "@/lib/tenant";
+import { askAi, aiErrorMessage } from "@/lib/ai";
 
 type Condition = "excellent" | "good" | "fair" | "poor";
 type Status = "pending" | "won" | "lost";
@@ -40,6 +41,24 @@ export default function Appraisals() {
   const [stockFor, setStockFor] = useState<Rec<Appraisal> | null>(null);
   const [stockNumber, setStockNumber] = useState("");
   const [toDelete, setToDelete] = useState<Rec<Appraisal> | null>(null);
+  const [ai, setAi] = useState<{ rec: Rec<Appraisal>; busy: boolean; text: string; error?: string } | null>(null);
+  const facts = (a: Appraisal) => {
+    const c = customers.find((x) => x.id === a.customerId); const v = a.vehicleId ? inventory.find((x) => x.id === a.vehicleId) : undefined;
+    return [`Trade-in: ${a.year} ${a.make} ${a.model} ${a.trim}`.trim(), a.vin && `VIN: ${a.vin}`, `Mileage: ${a.mileage.toLocaleString()}`, `Condition (appraiser's rating): ${a.condition}`,
+      `Recon estimate: ${money(a.reconEstimate)}`, `Book value: ${a.bookValue == null ? "not entered" : money(a.bookValue)}`, `ACV: ${money(a.acv)}`, `Offer to customer: ${money(a.offer)}`,
+      c && `Customer: ${fullName(c)}`, v && `Vehicle they're buying: ${vTitle(v)}${v.price ? ` (${money(v.price)})` : ""}`, `Appraiser notes: ${a.notes?.trim() || "none"}`].filter(Boolean).join("\n");
+  };
+  const runAiNotes = async (rec: Rec<Appraisal>) => {
+    setAi({ rec, busy: true, text: "" });
+    try { const text = await askAi("appraisal_notes", { messages: [{ role: "user", content: `Appraisal facts:\n${facts(rec.data)}` }], context: { customerId: rec.data.customerId } }); setAi({ rec, busy: false, text, error: text ? undefined : "The assistant returned nothing — try again." }); }
+    catch (e) { setAi({ rec, busy: false, text: "", error: aiErrorMessage(e) }); }
+  };
+  const saveAiNotes = async () => {
+    if (!ai?.text) return;
+    const cur = ai.rec.data.notes?.trim();
+    try { await updateRecord<Appraisal>("appraisal", ai.rec.id, { notes: cur ? `${cur}\n\n— AI notes —\n${ai.text}` : ai.text }); toast.success("Added to the appraisal notes"); setAi(null); }
+    catch (e: any) { toast.error(e.message); }
+  };
   const set = (k: keyof typeof blank) => (e: any) => setForm({ ...form, [k]: typeof e === "string" ? e : e.target.value });
 
   const rows = useMemo(() => appraisals.filter((a) => filter === "all" || a.data.status === filter), [appraisals, filter]);
@@ -125,6 +144,7 @@ export default function Appraisals() {
                 <td className="p-3"><Select value={a.data.status} onValueChange={(s) => setStatus(a, s as Status)}><SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="won">Won</SelectItem><SelectItem value="lost">Lost</SelectItem></SelectContent></Select></td>
                 <td className="p-3 whitespace-nowrap">
                   {a.data.status === "won" && (a.data.inventoryVehicleId ? <Badge className={STATUS_CLS.won}>In stock</Badge> : <Button size="sm" variant="outline" onClick={() => { setStockFor(a); setStockNumber(a.data.vin ? `T${a.data.vin.slice(-6)}` : ""); }}><PackagePlus className="h-4 w-4 mr-1" /> Add to inventory</Button>)}
+                  <Button size="sm" variant="ghost" className="ml-1" onClick={() => runAiNotes(a)} title="AI appraisal notes"><Sparkles className="h-4 w-4 mr-1" /> AI notes</Button>
                   <Button size="icon" variant="ghost" className="ml-1" onClick={() => setToDelete(a)}><Trash2 className="h-4 w-4" /></Button>
                 </td>
               </tr>
@@ -156,6 +176,16 @@ export default function Appraisals() {
           </div>
           <p className="text-xs text-muted-foreground">Book values are entered manually. Connect MarketCheck/KBB in Settings → Connections for automatic book values.</p>
           <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={save}>Save appraisal</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!ai} onOpenChange={(o) => !o && setAi(null)}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>AI appraisal notes</DialogTitle><DialogDescription>{ai ? `${ai.rec.data.year} ${ai.rec.data.make} ${ai.rec.data.model} — written only from the facts you entered.` : ""}</DialogDescription></DialogHeader>
+          {ai?.busy && <p className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Writing notes…</p>}
+          {ai?.error && <p className="text-sm rounded-md border border-amber-300 bg-amber-50 text-amber-900 p-2">{ai.error}</p>}
+          {ai?.text && <Textarea rows={10} value={ai.text} onChange={(e) => setAi({ ...ai, text: e.target.value })} />}
+          <DialogFooter className="gap-2"><Button variant="outline" onClick={() => setAi(null)}>Close</Button>{ai?.text && <Button onClick={saveAiNotes}>Add to appraisal notes</Button>}</DialogFooter>
         </DialogContent>
       </Dialog>
 

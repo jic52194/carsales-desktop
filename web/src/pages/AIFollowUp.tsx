@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,8 +12,9 @@ import { toast } from "sonner";
 import { useCollection, insert, update, get, fullName, fmtDateTime, logActivity, type Lead } from "@/lib/store";
 import { useInventory, vTitle } from "@/lib/inventory";
 import { useAuth, useUsers } from "@/lib/auth";
-import { askAi, AiNotConfigured } from "@/lib/ai";
-import { smsHref, mailtoHref } from "@/pages/TextingTemplates";
+import { askAi, aiErrorMessage } from "@/lib/ai";
+import { useGhlStatus, ghlErrorMessage } from "@/lib/ghl";
+import { deliverMessage } from "@/components/ComposeMessage";
 
 type Urgency = "now" | "today" | "week";
 const DAY = 86400000;
@@ -31,6 +33,9 @@ export default function AIFollowUp() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [aiNote, setAiNote] = useState<string | null>(null);
+  const [subject, setSubject] = useState("");
+  const [sending, setSending] = useState(false);
+  const ghl = useGhlStatus();
 
   const queue = useMemo(() => {
     const open = leads.filter((l) => !["sold", "lost"].includes(l.stage) && (!mine || l.assignedTo === user?.id));
@@ -50,19 +55,30 @@ export default function AIFollowUp() {
   const sel = queue.find((q) => q.lead.id === selectedId) ?? null;
   const customer = sel ? get("customers", sel.lead.customerId) : undefined;
   const vehicle = sel?.lead.vehicleId ? inventory.find((v) => v.id === sel.lead.vehicleId) : undefined;
-  const pick = (id: string) => { setSelectedId(id); setDraft(""); setAiNote(null); };
+  const pick = (id: string) => { setSelectedId(id); setDraft(""); setSubject(""); setAiNote(null); };
 
   const generate = async () => {
     if (!sel) return;
     setBusy(true); setAiNote(null);
     try {
-      const text = await askAi(mode, { context: { customerId: sel.lead.customerId, vehicleId: sel.lead.vehicleId } });
+      let text = await askAi(mode, { context: { customerId: sel.lead.customerId, vehicleId: sel.lead.vehicleId } });
+      const m = mode === "follow_up_email" ? text.match(/^\s*subject:\s*(.+)$/im) : null;
+      if (m) { setSubject(m[1].trim()); text = text.replace(m[0], "").trim(); }
       setDraft(text);
       if (!text) setAiNote("The assistant returned an empty draft. Try again or write it yourself below.");
     } catch (e: any) {
-      if (e instanceof AiNotConfigured) setAiNote("AI assistant isn't set up yet — add the Anthropic key in Settings. You can still write the message below.");
-      else setAiNote(e.message || "The assistant couldn't draft this one. Write it below.");
+      setAiNote(`${aiErrorMessage(e)} You can still write the message below.`);
     } finally { setBusy(false); }
+  };
+  const send = async () => {
+    if (!sel || !customer || !draft.trim()) return;
+    const channel = mode === "follow_up_text" ? "sms" : "email";
+    setSending(true);
+    try {
+      const via = await deliverMessage({ customer, channel, body: draft, subject: subject || (vehicle ? `About the ${vTitle(vehicle)}` : "Following up"), ghlConnected: ghl.connected, userId: user?.id, activity: { entity: "lead", id: sel.lead.id } });
+      if (via === "ghl") toast.success(channel === "sms" ? "Text sent" : "Email sent");
+      if (sel.lead.stage === "new") await update("leads", sel.lead.id, { stage: "contacted" }).catch(() => {});
+    } catch (e) { toast.error(ghlErrorMessage(e)); } finally { setSending(false); }
   };
   const markContacted = async () => {
     if (!sel) return;
@@ -124,16 +140,17 @@ export default function AIFollowUp() {
                 <Button onClick={generate} disabled={busy}>{busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />} Draft with AI</Button>
               </div>
               {aiNote && <p className="text-sm rounded-md border border-amber-300 bg-amber-50 text-amber-900 p-2">{aiNote}</p>}
+              {mode === "follow_up_email" && <div className="space-y-1"><Label>Subject</Label><Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={vehicle ? `About the ${vTitle(vehicle)}` : "Following up"} /></div>}
               <div className="space-y-1"><Label>Message (edit before sending)</Label><Textarea rows={8} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={busy ? "Drafting…" : "Draft with AI, or type your own follow-up here."} /></div>
               <div className="flex flex-wrap gap-2">
                 {mode === "follow_up_text"
-                  ? (customer.phone && draft ? <Button asChild><a href={smsHref(customer.phone, draft)} onClick={() => logActivity("sms", "lead", sel.lead.id, draft.slice(0, 140), user?.id)}><MessageSquare className="h-4 w-4 mr-1" /> Send text</a></Button> : <Button disabled><MessageSquare className="h-4 w-4 mr-1" /> Send text</Button>)
-                  : (draft ? <Button asChild><a href={mailtoHref(customer.email, vehicle ? `About the ${vTitle(vehicle)}` : "Following up", draft)} onClick={() => logActivity("email", "lead", sel.lead.id, draft.slice(0, 140), user?.id)}><Mail className="h-4 w-4 mr-1" /> Send email</a></Button> : <Button disabled><Mail className="h-4 w-4 mr-1" /> Send email</Button>)}
+                  ? <Button onClick={send} disabled={sending || !draft.trim() || !customer.phone} title={customer.phone ? "" : "No phone number on file"}>{sending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <MessageSquare className="h-4 w-4 mr-1" />} Send text</Button>
+                  : <Button onClick={send} disabled={sending || !draft.trim() || !customer.email} title={customer.email ? "" : "No email on file"}>{sending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Mail className="h-4 w-4 mr-1" />} Send email</Button>}
                 <Button variant="secondary" onClick={markContacted}><CheckCircle2 className="h-4 w-4 mr-1" /> Mark contacted</Button>
                 <Button variant="outline" onClick={() => snooze(1)}><AlarmClock className="h-4 w-4 mr-1" /> Snooze 1d</Button>
                 <Button variant="outline" onClick={() => snooze(3)}>Snooze 3d</Button>
               </div>
-              <p className="text-xs text-muted-foreground">Send opens your phone's messaging app or mail client. Mark contacted moves new leads to Contacted and logs the touch. Snooze creates a task on the lead's rep.</p>
+              <p className="text-xs text-muted-foreground">{ghl.connected ? "Send goes out from the dealership's GoHighLevel number/email and shows in the Inbox." : <>Send opens your phone's messaging app or mail client and logs it. <Link to="/settings" className="underline text-primary">Connect GoHighLevel</Link> to send from the dealership number.</>} Mark contacted moves new leads to Contacted and logs the touch. Snooze creates a task on the lead's rep.</p>
             </CardContent>
           )}
         </Card>

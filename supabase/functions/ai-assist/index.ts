@@ -1,15 +1,23 @@
 // ai-assist — dealership AI assistant. Runs Claude server-side with the caller's own tenant data.
-// Auth: signed-in user JWT (verified). The Anthropic key lives only in the ANTHROPIC_API_KEY secret.
+// Auth: signed-in user JWT (verified). Anthropic key: the dealership's own key saved in Settings → Connections
+// (integration_secrets, service-role only), else the platform ANTHROPIC_API_KEY secret. Never sent to the browser.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+const PLATFORM_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+async function tenantKey(tenantId: string): Promise<string | null> {
+  const { data: row } = await admin.from("integrations").select("id,status").eq("tenant_id", tenantId).eq("provider", "anthropic").maybeSingle();
+  if (!row || row.status !== "connected") return null;
+  const { data: sec } = await admin.from("integration_secrets").select("secret").eq("integration_id", row.id).maybeSingle();
+  return sec?.secret ?? null;
+}
 const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-5";
 
-const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type, apikey", "content-type": "application/json" };
+const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type, apikey, x-client-info", "content-type": "application/json" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: cors });
 
 Deno.serve(async (req) => {
@@ -20,8 +28,6 @@ Deno.serve(async (req) => {
   const asUser = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: `Bearer ${jwt}` } }, auth: { persistSession: false } });
   const { data: { user } } = await asUser.auth.getUser();
   if (!user) return json({ error: "unauthorized" }, 401);
-  if (!ANTHROPIC_KEY) return json({ error: "AI assistant isn't configured yet — add the ANTHROPIC_API_KEY secret in Supabase.", code: "no_key" }, 503);
-
   const body = await req.json().catch(() => ({}));
   const task: string = body.task || "chat";
   const messages: { role: "user" | "assistant"; content: string }[] = Array.isArray(body.messages) ? body.messages.slice(-12) : [];
@@ -29,6 +35,8 @@ Deno.serve(async (req) => {
 
   const { data: me } = await asUser.rpc("me");
   const tenant = me?.tenant ?? {}; const profile = me?.profile ?? {};
+  const ANTHROPIC_KEY = (profile.tenant_id ? await tenantKey(profile.tenant_id) : null) || PLATFORM_KEY;
+  if (!ANTHROPIC_KEY) return json({ error: "AI isn't set up yet — an admin can add the Anthropic API key in Settings → Connections.", code: "no_key" }, 503);
 
   // Pull the pieces of dealership data the task needs (all through RLS)
   let dataBlock = "";
@@ -42,6 +50,11 @@ Deno.serve(async (req) => {
     const { data: inv } = await asUser.from("vehicles").select("stock_number,year,make,model,trim,mileage,price,exterior_color,status,drivetrain,fuel_type").eq("status", "Available").order("price", { ascending: true }).limit(300);
     dataBlock += `\nAVAILABLE INVENTORY (${inv?.length ?? 0} units): ${JSON.stringify(inv ?? [])}`;
   }
+  if (Array.isArray(ctx.conversation) && ctx.conversation.length) {
+    const conv = (ctx.conversation as any[]).slice(-20).map((m) => `${m.direction === "inbound" ? "CUSTOMER" : "DEALERSHIP"} (${m.channel ?? "sms"}, ${m.at ?? ""}): ${String(m.body ?? "").slice(0, 600)}`).join("\n");
+    dataBlock += `\nRECENT CONVERSATION (oldest first):\n${conv}`;
+  }
+  if (ctx.dealId) { const { data: d } = await asUser.from("deals").select("*").eq("id", ctx.dealId).single(); if (d) dataBlock += `\nDEAL: ${JSON.stringify(d)}`; }
   if (task === "daily_brief") {
     const since = new Date(Date.now() - 7 * 86400e3).toISOString();
     const [{ data: leads }, { data: deals }, { data: appts }, { data: tasks }] = await Promise.all([
@@ -65,13 +78,19 @@ ${dataBlock}`;
     follow_up_email: "Write a brief follow-up email (subject line + 4-6 sentences) to this customer about their vehicle of interest.",
     customer_summary: "Summarize this customer's history and suggest the single best next step.",
     daily_brief: "Give a morning brief for this dealership in 6-10 bullet-free sentences: what came in, what's hot, what's overdue, and the 3 things to do today.",
+    reply_suggestion: "Read the recent conversation and write the dealership's next reply to the customer as a short SMS (under 320 characters). Answer what they asked using only the data provided; if something isn't in the data (price, availability), say you'll confirm. Move toward an appointment. Output only the message text.",
+    deal_coach: "Look at this deal and give the salesperson 3 concrete, compliant ideas to structure it better (down payment, term, products, trade) in plain sentences. Never promise approval or rates.",
+    appraisal_notes: "Write short, factual appraisal notes for this trade-in from the data provided: condition summary, reconditioning to expect, and questions to ask the customer.",
+    campaign_copy: "Write a short SMS campaign message (under 300 characters) and a matching email (subject + 4 sentences) for the dealership, based on the request. Include an opt-out line in the SMS ('Reply STOP to opt out').",
   };
+  // a task with the user's own words (e.g. "campaign for AWD SUVs") → the task instruction rides in the system prompt
+  const sys = messages.length && prompts[task] ? `${system}\n\nTASK: ${prompts[task]}` : system;
   const userMsgs = messages.length ? messages : [{ role: "user" as const, content: prompts[task] ?? "How can you help?" }];
 
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model: MODEL, max_tokens: 1024, system, messages: userMsgs }),
+    body: JSON.stringify({ model: MODEL, max_tokens: 1024, system: sys, messages: userMsgs }),
   });
   if (!r.ok) { const t = await r.text(); return json({ error: `AI request failed (${r.status})`, detail: t.slice(0, 300) }, 502); }
   const out = await r.json();

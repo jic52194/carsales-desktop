@@ -8,12 +8,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ArrowLeft, Calculator, Calendar, Pencil, ExternalLink, ChevronLeft, ChevronRight, Upload, Loader2, Trash2 } from "lucide-react";
+import { ArrowLeft, Calculator, Calendar, Pencil, ExternalLink, ChevronLeft, ChevronRight, Upload, Loader2, Trash2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { getVehicle, upsertVehicle, uploadVehiclePhotos, vTitle, vPrice, vDaysInStock, PLACEHOLDER_IMG, useInventory, type Vehicle } from "@/lib/inventory";
 import { useCollection, get, fullName, money } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { carfaxUrl } from "@/lib/integrations";
+import { askAi, aiErrorMessage } from "@/lib/ai";
 
 const STATUSES = ["Available", "Pending", "Sold", "Recon", "Wholesale", "Hold"];
 
@@ -30,6 +31,23 @@ export default function VDP() {
   const [uploading, setUploading] = useState(false);
   const onUpload = async (files: FileList | null) => { if (!files || !edit) return; setUploading(true); try { const urls = await uploadVehiclePhotos(edit.id, files); setEdit({ ...edit, images: [...edit.images, ...urls] }); toast.success(`${urls.length} photo${urls.length === 1 ? "" : "s"} uploaded`); } catch (e: any) { toast.error(e.message); } finally { setUploading(false); } };
   const canEdit = hasPermission(["manager", "inventory"]);
+  const [desc, setDesc] = useState<{ busy: boolean; text?: string; error?: string; saving?: boolean }>({ busy: false });
+  const writeDescription = async (into?: "edit") => {
+    if (!id) return;
+    setDesc({ busy: true });
+    try {
+      const text = await askAi("vehicle_description", { context: { vehicleId: id } });
+      if (!text) { setDesc({ busy: false, error: "The assistant returned nothing — try again." }); return; }
+      if (into === "edit") { setEdit((e) => (e ? { ...e, description: text } : e)); setDesc({ busy: false }); }
+      else setDesc({ busy: false, text });
+    } catch (e) { setDesc({ busy: false, error: aiErrorMessage(e) }); }
+  };
+  const saveDescription = async () => {
+    const cur = id ? getVehicle(id) : undefined; if (!cur || !desc.text) return;
+    setDesc({ ...desc, saving: true });
+    try { await upsertVehicle({ ...cur, description: desc.text }); toast.success("Description saved"); setDesc({ busy: false }); }
+    catch (e: any) { toast.error(e.message || "Could not save"); setDesc({ ...desc, saving: false }); }
+  };
 
   if (!v) return <div className="p-8"><Button variant="ghost" onClick={() => navigate("/inventory")}><ArrowLeft className="h-4 w-4 mr-1" /> Inventory</Button><p className="mt-6 text-muted-foreground">Vehicle not found.</p></div>;
   const imgs = v.images.length ? v.images : [PLACEHOLDER_IMG];
@@ -57,7 +75,14 @@ export default function VDP() {
           <Card><CardHeader><CardTitle className="text-base">Specifications</CardTitle></CardHeader><CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {spec("Mileage", v.mileage.toLocaleString())}{spec("VIN", v.vin)}{spec("Exterior", v.exteriorColor)}{spec("Interior", v.interiorColor)}{spec("Engine", v.engine)}{spec("Transmission", v.transmission)}{spec("Drivetrain", v.drivetrain)}{spec("Body", v.bodyStyle)}{spec("Fuel", v.fuelType)}{spec("MPG", v.mpg)}
           </CardContent></Card>
-          {v.description && <Card><CardHeader><CardTitle className="text-base">Description</CardTitle></CardHeader><CardContent className="text-sm whitespace-pre-wrap">{v.description}</CardContent></Card>}
+          {(v.description || canEdit) && <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-2"><CardTitle className="text-base">Description</CardTitle>{canEdit && <Button size="sm" variant="outline" onClick={() => writeDescription()} disabled={desc.busy}>{desc.busy && !edit ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />} {v.description ? "Rewrite with AI" : "Write description"}</Button>}</CardHeader>
+            <CardContent className="text-sm space-y-3">
+              {v.description ? <p className="whitespace-pre-wrap">{v.description}</p> : !desc.text && <p className="text-muted-foreground">No description yet. "Write description" drafts one from this unit's real specs and features.</p>}
+              {!edit && desc.error && <p className="rounded-md border border-amber-300 bg-amber-50 text-amber-900 p-2">{desc.error}</p>}
+              {desc.text && <div className="space-y-2 rounded-md border border-primary/30 p-3"><p className="text-xs font-semibold text-primary">AI draft — edit, then save</p><Textarea rows={6} value={desc.text} onChange={(e) => setDesc({ ...desc, text: e.target.value })} /><div className="flex gap-2"><Button size="sm" onClick={saveDescription} disabled={desc.saving}>{desc.saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null} Save as description</Button><Button size="sm" variant="ghost" onClick={() => setDesc({ busy: false })}>Discard</Button></div></div>}
+            </CardContent>
+          </Card>}
           {v.features.length > 0 && <Card><CardHeader><CardTitle className="text-base">Features</CardTitle></CardHeader><CardContent className="flex flex-wrap gap-1.5">{v.features.map((f) => <Badge key={f} variant="outline">{f}</Badge>)}</CardContent></Card>}
         </div>
         <div className="space-y-6">
@@ -94,7 +119,7 @@ export default function VDP() {
               <div className="flex flex-wrap gap-2">{edit.images.map((u, idx) => <div key={u + idx} className="relative h-16 w-20 rounded overflow-hidden border"><img src={u} className="h-full w-full object-cover" /><button type="button" onClick={() => setEdit({ ...edit, images: edit.images.filter((_, j) => j !== idx) })} className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded p-0.5"><Trash2 className="h-3 w-3" /></button>{idx === 0 && <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] text-center">cover</span>}</div>)}</div>
               <label className="inline-flex items-center gap-2 text-sm cursor-pointer rounded-md border px-3 py-2 hover:bg-muted">{uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Upload photos<input type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={(e) => onUpload(e.target.files)} /></label>
             </div>
-            <div className="space-y-1 col-span-2"><Label>Description</Label><Textarea rows={4} value={edit.description ?? ""} onChange={(e) => setEdit({ ...edit, description: e.target.value })} /></div>
+            <div className="space-y-1 col-span-2"><div className="flex items-center justify-between"><Label>Description</Label><Button type="button" size="sm" variant="ghost" onClick={() => writeDescription("edit")} disabled={desc.busy}>{desc.busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />} AI write</Button></div>{desc.error && <p className="text-xs text-amber-800">{desc.error}</p>}<Textarea rows={4} value={edit.description ?? ""} onChange={(e) => setEdit({ ...edit, description: e.target.value })} /></div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setEdit(null)}>Cancel</Button><Button onClick={saveEdit}>Save</Button></DialogFooter>
         </DialogContent>}

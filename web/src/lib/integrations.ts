@@ -2,7 +2,7 @@
 // server-side only; the app never sees them again.
 import { supabase } from "@/lib/supabase";
 
-export type Provider = "ghl" | "carfax" | "marketcheck" | "kbb" | "routeone" | "dealertrack" | "stripe";
+export type Provider = "ghl" | "carfax" | "marketcheck" | "kbb" | "routeone" | "dealertrack" | "stripe" | "anthropic";
 export interface Integration { id: string; provider: Provider; status: "needs_key" | "connected" | "error" | "disabled"; config: Record<string, any>; hasSecret: boolean; connectedAt?: string; lastError?: string | null }
 
 export const PROVIDERS: { key: Provider; label: string; group: string; what: string; secretLabel: string; fields?: { key: string; label: string; placeholder?: string }[]; selfServe: boolean; note?: string }[] = [
@@ -12,6 +12,7 @@ export const PROVIDERS: { key: Provider; label: string; group: string; what: str
   { key: "carfax", label: "CARFAX", group: "Vehicle data", what: "Vehicle history reports. Links work today without a key; a dealer account enables embedded reports.", secretLabel: "CARFAX dealer API key", selfServe: false },
   { key: "routeone", label: "RouteOne (credit applications)", group: "F&I", what: "Submit credit apps to Capital One, Credit Acceptance and other lenders.", secretLabel: "Dealer credentials token", selfServe: false, note: "Set up through your RouteOne rep; Best Price already uses Capital One Auto Navigator + Credit Acceptance." },
   { key: "dealertrack", label: "Dealertrack", group: "F&I", what: "Alternative lender portal / DMS bridge.", secretLabel: "API token", selfServe: false },
+  { key: "anthropic", label: "Anthropic (AI assistant)", group: "AI", what: "Powers every AI button: follow-up drafts, reply suggestions, deal coach, appraisal notes, descriptions and the morning brief.", secretLabel: "API key", selfServe: true, note: "Get a key at console.anthropic.com → API Keys." },
   { key: "stripe", label: "Stripe (CarSales AI OS billing)", group: "Platform", what: "Subscription billing for the software itself.", secretLabel: "Restricted API key", selfServe: false, note: "Platform-level — managed by CarSalesSoftware.com." },
 ];
 

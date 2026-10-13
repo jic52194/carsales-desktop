@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, RefreshCw, Plug, Unplug, CheckCircle2, AlertTriangle, Webhook, Send } from "lucide-react";
+import { Loader2, RefreshCw, Plug, Unplug, CheckCircle2, AlertTriangle, Webhook, Send, Users, MessageSquare, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { PROVIDERS, listIntegrations, connectIntegration, disconnectIntegration, type Integration, type Provider } from "@/lib/integrations";
 import { syncInventoryNow } from "@/lib/ai";
@@ -14,6 +14,7 @@ import { refreshInventory } from "@/lib/inventory";
 import { useTenant } from "@/lib/tenant";
 import { useAuth } from "@/lib/auth";
 import { SUPABASE_URL } from "@/lib/supabase";
+import { ghlSyncCustomers, ghlErrorMessage, refreshGhlStatus } from "@/lib/ghl";
 
 export function ConnectionsTab() {
   const tenant = useTenant();
@@ -33,6 +34,23 @@ export function ConnectionsTab() {
   const [testBusy, setTestBusy] = useState(false);
   const [whLog, setWhLog] = useState<any[]>([]);
   const [showPayload, setShowPayload] = useState(false);
+  const canSyncGhl = hasPermission(["admin", "manager"]);
+  const [ghlSync, setGhlSync] = useState<{ running: boolean; synced: number; skipped: number; remaining: number | null; errors: string[] } | null>(null);
+  const syncGhlCustomers = async () => {
+    let synced = 0, skipped = 0; const errors: string[] = [];
+    setGhlSync({ running: true, synced, skipped, remaining: null, errors });
+    try {
+      for (let i = 0; i < 100; i++) {
+        const r = await ghlSyncCustomers(50);
+        synced += r.synced; skipped += r.skipped; for (const e of r.errors ?? []) if (errors.length < 5 && !errors.includes(e)) errors.push(e);
+        setGhlSync({ running: true, synced, skipped, remaining: r.remaining, errors: [...errors] });
+        // stop when done, or when a batch made no progress (every remaining customer is erroring)
+        if (r.remaining === 0 || r.synced === 0) break;
+      }
+      toast.success(`GoHighLevel sync done: ${synced} customers synced${skipped ? `, ${skipped} skipped` : ""}`);
+    } catch (e) { toast.error(ghlErrorMessage(e)); }
+    finally { setGhlSync((s) => (s ? { ...s, running: false } : s)); }
+  };
   const loadWebhooks = async () => {
     if (!tenant.dbId) return;
     const { data } = await supabase.from("tenants").select("webhooks").eq("id", tenant.dbId).maybeSingle();
@@ -81,13 +99,15 @@ export function ConnectionsTab() {
   };
   const connect = async () => {
     if (!open) return; setBusy(true);
-    try { const r = await connectIntegration(open, secret, cfg); if (r.ok) toast.success("Connected"); else toast.error(r.error || "Saved, but the key couldn't be verified"); setOpen(null); setSecret(""); setCfg({}); await load(); }
+    try { const r = await connectIntegration(open, secret, cfg); if (r.ok) toast.success("Connected"); else toast.error(r.error || "Saved, but the key couldn't be verified"); setOpen(null); setSecret(""); setCfg({}); await load(); if (open === "ghl") refreshGhlStatus(true); }
     catch (e: any) { toast.error(e.message); } finally { setBusy(false); }
   };
-  const disconnect = async (p: Provider) => { try { await disconnectIntegration(p); toast.success("Disconnected"); await load(); } catch (e: any) { toast.error(e.message); } };
+  const disconnect = async (p: Provider) => { try { await disconnectIntegration(p); toast.success("Disconnected"); await load(); if (p === "ghl") refreshGhlStatus(true); } catch (e: any) { toast.error(e.message); } };
   const st = (p: Provider) => rows.find((r) => r.provider === p);
   const lastRun = runs[0];
   const intakeKey = (tenant as any).intakeKey as string | undefined;
+  const inboundUrl = intakeKey ? `${SUPABASE_URL}/functions/v1/ghl-inbound?key=${intakeKey}` : "";
+  const ghlRow = st("ghl"); const ghlConnected = ghlRow?.status === "connected";
   const embed = intakeKey ? `<form action="${SUPABASE_URL}/functions/v1/lead-intake" method="POST">
   <input type="hidden" name="key" value="${intakeKey}">
   <input type="hidden" name="source" value="Website">
@@ -145,7 +165,23 @@ export function ConnectionsTab() {
         </CardContent>
       </Card>
 
-      {["Communication", "Vehicle data", "F&I", "Platform"].map((g) => (
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><MessageSquare className="h-4 w-4 text-primary" /> Two-way texting (GoHighLevel → CarSales AI OS)</CardTitle><CardDescription>Customer replies to your texts and emails land in the Inbox here (and open a lead if they don't have one). Set it up once in GoHighLevel:</CardDescription></CardHeader>
+        <CardContent className="space-y-3">
+          {inboundUrl ? (<>
+            <div className="flex flex-col sm:flex-row gap-2"><Input readOnly value={inboundUrl} className="font-mono text-xs flex-1" onFocus={(e) => e.currentTarget.select()} /><Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(inboundUrl); toast.success("Copied"); }}><Copy className="h-4 w-4 mr-1" /> Copy</Button></div>
+            <ol className="text-sm list-decimal pl-5 space-y-1">
+              <li>In GoHighLevel go to <b>Automation → Create workflow</b> (start from scratch).</li>
+              <li>Add the trigger <b>Customer Replied</b> and set the reply channel to SMS and Email.</li>
+              <li>Add the action <b>Webhook</b>, method <b>POST</b>, and paste the URL above.</li>
+              <li>Save and <b>Publish</b> the workflow. Text the dealership number from your phone to test it.</li>
+            </ol>
+            <p className="text-xs text-muted-foreground">The key in this URL is your dealership's private intake key — treat the URL like a password.</p>
+          </>) : <p className="text-sm text-muted-foreground">Sign in again to load your dealership's inbound URL.</p>}
+        </CardContent>
+      </Card>
+
+      {["Communication", "AI", "Vehicle data", "F&I", "Platform"].map((g) => (
         <Card key={g}>
           <CardHeader><CardTitle className="text-base">{g}</CardTitle></CardHeader>
           <CardContent className="divide-y">
@@ -155,6 +191,18 @@ export function ConnectionsTab() {
                 <Badge variant="outline" className={connected ? "bg-emerald-100 text-emerald-800" : s?.status === "error" ? "bg-red-100 text-red-800" : p.key === "carfax" ? "bg-blue-100 text-blue-800" : "bg-amber-100 text-amber-800"}>{connected ? "Connected" : s?.status === "error" ? "Key rejected" : p.key === "carfax" ? "Links work now" : p.key === "stripe" ? "Platform" : "Needs API key"}</Badge>
                 {isAdmin && p.key !== "stripe" && (connected ? <Button size="sm" variant="outline" onClick={() => disconnect(p.key)}><Unplug className="h-4 w-4 mr-1" /> Disconnect</Button> : <Button size="sm" variant={p.selfServe ? "default" : "outline"} onClick={() => { setOpen(p.key); setSecret(""); setCfg({}); }}><Plug className="h-4 w-4 mr-1" /> Connect</Button>)}
               </div>); })}
+            {g === "Communication" && ghlConnected && (
+              <div className="py-3 space-y-2 text-sm">
+                <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> Connected · Location <code className="text-xs">{ghlRow?.config?.locationId ?? "—"}</code></p>
+                <p className="text-xs text-muted-foreground">Texts and emails sent from Inbox, customer profiles and follow-ups go out from this sub-account; bookings use its calendars.</p>
+                {canSyncGhl && <div className="flex flex-wrap items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={syncGhlCustomers} disabled={!!ghlSync?.running}>{ghlSync?.running ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Users className="h-4 w-4 mr-1" />} Sync customers to GoHighLevel</Button>
+                  {ghlSync && <span className="text-xs text-muted-foreground">{ghlSync.synced} synced{ghlSync.skipped ? ` · ${ghlSync.skipped} skipped` : ""}{ghlSync.remaining != null ? ` · ${ghlSync.remaining} remaining` : ""}{ghlSync.running ? " · working…" : ""}</span>}
+                </div>}
+                {ghlSync && ghlSync.errors.length > 0 && <ul className="text-xs text-destructive list-disc pl-5">{ghlSync.errors.map((e) => <li key={e}>{e}</li>)}</ul>}
+                {ghlSync && !ghlSync.running && (ghlSync.remaining ?? 0) > 0 && <p className="text-xs text-muted-foreground">Customers without a phone or email can't be created in GoHighLevel — add contact info and sync again.</p>}
+              </div>
+            )}
           </CardContent>
         </Card>
       ))}

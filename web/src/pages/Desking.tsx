@@ -6,13 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Save, Printer } from "lucide-react";
+import { Save, Printer, Sparkles, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { calculateDeal, formatCurrency, type DealParameters } from "@/lib/calculations";
 import { useCollection, insert, update, get, fullName, type Deal } from "@/lib/store";
 import { useInventory, vTitle } from "@/lib/inventory";
 import { useAuth } from "@/lib/auth";
 import { useTenant, formatAddress } from "@/lib/tenant";
+import { askAi, aiErrorMessage } from "@/lib/ai";
 
 const DEFAULTS_KEY = "cso:desking-defaults";
 const baseDefaults = { pack: 0, docFee: 399, taxRate: 6.25, nonTaxableFees: 0, termMonths: 72, apr: 9.99, bankFee: 0, dealerReserve: 0 };
@@ -56,6 +57,13 @@ export default function Desking() {
   }, [vehicleId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const calc = useMemo(() => calculateDeal(p), [p]);
+  const [coach, setCoach] = useState<{ busy: boolean; text?: string; error?: string }>({ busy: false });
+  const runCoach = async () => {
+    if (!existing) return;
+    setCoach({ busy: true });
+    try { const text = await askAi("deal_coach", { context: { dealId: existing.id, customerId: existing.customerId, vehicleId: existing.vehicleId } }); setCoach({ busy: false, text: text || undefined, error: text ? undefined : "The assistant returned nothing — try again." }); }
+    catch (e) { setCoach({ busy: false, error: aiErrorMessage(e) }); }
+  };
   const set = (k: keyof DealParameters) => (n: number) => setP({ ...p, [k]: n });
   const terms = [24, 36, 48, 60, 72, 84];
 
@@ -133,6 +141,14 @@ export default function Desking() {
               <div className="flex justify-between"><span className="text-slate-400">Front gross</span><span className={calc.frontEndGross < 0 ? "text-red-400" : "text-emerald-400"}>{formatCurrency(calc.frontEndGross)}</span></div>
               <div className="flex justify-between"><span className="text-slate-400">Back gross</span><span className={calc.backEndGross < 0 ? "text-red-400" : "text-emerald-400"}>{formatCurrency(calc.backEndGross)}</span></div>
               <div className="flex justify-between font-bold text-base"><span>Total gross</span><span className={calc.totalGross < 0 ? "text-red-400" : "text-emerald-400"}>{formatCurrency(calc.totalGross)}</span></div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> AI deal coach</CardTitle><CardDescription>{existing ? "Ideas to structure this deal better — reads the last saved version." : "Save the deal first — the coach reads the saved deal."}</CardDescription></CardHeader>
+            <CardContent className="space-y-2">
+              <Button size="sm" variant="outline" onClick={runCoach} disabled={!existing || coach.busy} title={existing ? "" : "Save the deal first"}>{coach.busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />} {coach.text ? "Coach again" : "AI deal coach"}</Button>
+              {coach.error && <p className="text-sm rounded-md border border-amber-300 bg-amber-50 text-amber-900 p-2">{coach.error}</p>}
+              {coach.text && <p className="text-sm whitespace-pre-wrap">{coach.text}</p>}
             </CardContent>
           </Card>
           <Card><CardHeader><CardTitle className="text-base">Payment grid</CardTitle><CardDescription>By term at current APR</CardDescription></CardHeader><CardContent className="grid grid-cols-3 gap-2">

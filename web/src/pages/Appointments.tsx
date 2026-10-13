@@ -8,11 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Plus } from "lucide-react";
+import { Plus, CalendarCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useCollection, insert, update, get, fullName, type Appointment } from "@/lib/store";
 import { useInventory, vTitle } from "@/lib/inventory";
 import { useAuth, useUsers } from "@/lib/auth";
+import { useGhlStatus } from "@/lib/ghl";
+import { BookGhlDialog } from "@/components/BookGhlDialog";
 
 const TYPES = [["test_drive", "Test drive"], ["sales", "Sales appointment"], ["delivery", "Delivery"], ["service", "Service"], ["other", "Other"]] as const;
 const STATUSES = ["scheduled", "confirmed", "showed", "no_show", "cancelled"] as const;
@@ -28,6 +30,8 @@ export default function Appointments() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ customerId: "", vehicleId: "", type: "test_drive", startsAt: toLocal(new Date(Date.now() + 3600e3)), assignedTo: user?.id ?? "", notes: "" });
   const [range, setRange] = useState<"upcoming" | "past">("upcoming");
+  const ghl = useGhlStatus();
+  const [ghlOpen, setGhlOpen] = useState(false);
 
   useEffect(() => {
     const c = params.get("customer");
@@ -46,10 +50,11 @@ export default function Appointments() {
 
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div><h1 className="text-3xl font-black">Appointments</h1><p className="text-muted-foreground">{rows.length} {range}</p></div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Select value={range} onValueChange={(v: any) => setRange(v)}><SelectTrigger className="w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="upcoming">Upcoming</SelectItem><SelectItem value="past">Past</SelectItem></SelectContent></Select>
+          {ghl.connected && <Button variant="outline" onClick={() => setGhlOpen(true)}><CalendarCheck className="h-4 w-4 mr-1" /> Book in GoHighLevel</Button>}
           <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4 mr-1" /> Book</Button>
         </div>
       </div>
@@ -89,6 +94,7 @@ export default function Appointments() {
           <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={save}>Book</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+      <BookGhlDialog open={ghlOpen} onOpenChange={setGhlOpen} />
     </div>
   );
 }

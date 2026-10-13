@@ -32,7 +32,7 @@ export function AiPanel() {
       const out = await askAi(task, { messages: task === "chat" ? history : [], context: { vehicleId, customerId, includeInventory: task === "chat" || task === "inventory_question" } });
       setMsgs([...history, { role: "assistant", content: out }]);
     } catch (e: any) {
-      if (e instanceof AiNotConfigured) { setNotConfigured(true); setMsgs([...history, { role: "assistant", content: "The AI assistant isn't switched on yet. An administrator needs to add the Anthropic API key in the Supabase project (Edge Functions → Secrets → ANTHROPIC_API_KEY)." }]); }
+      if (e instanceof AiNotConfigured) { setNotConfigured(true); setMsgs([...history, { role: "assistant", content: "The AI assistant isn't switched on yet. An administrator can add the Anthropic API key in Settings → Connections → Anthropic (AI assistant)." }]); }
       else toast.error(e.message || "AI request failed");
     } finally { setBusy(false); }
   };

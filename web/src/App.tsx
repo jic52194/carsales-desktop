@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { LoginScreen } from "@/components/LoginScreen";
 import { ChangePasswordScreen } from "@/components/ChangePasswordScreen";
@@ -14,6 +14,10 @@ import { OnboardingGate } from "@/components/OnboardingGate";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { AiPanel } from "@/components/AiPanel";
 import { LeadNotifier } from "@/components/LeadNotifier";
+import { TopBar } from "@/components/TopBar";
+import { CommandPalette } from "@/components/CommandPalette";
+import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { applyTenantTheme, resetTheme, useTenant } from "@/lib/tenant";
 import Dashboard from "@/pages/Dashboard";
@@ -81,11 +85,8 @@ import NotFound from "@/pages/NotFound";
 const queryClient = new QueryClient();
 
 function Shell() {
-  const { user, ready, mfaPending, location: store } = useAuth();
+  const { user, ready, mfaPending } = useAuth();
   const tenant = useTenant();
-  // Store (location) branding wins over the dealership's when the user is attached to a store.
-  const brandLogo = store?.logoUrl || tenant.logoUrl;
-  const brandName = store?.brandName || tenant.name;
 
   // Platform (CarSalesSoftware.com) look until signed in; dealership brand after.
   useEffect(() => { if (user) applyTenantTheme(tenant); else resetTheme(); }, [user, tenant]);
@@ -107,6 +108,10 @@ function Shell() {
       <AiPanel />
       <LeadNotifier />
       <WorkflowRunner />
+      <CommandPalette />
+      <KeyboardShortcuts />
+      {/* Keep the floating AI button clear of the phone bottom nav. */}
+      <style>{`@media (max-width: 767px){button[title="AI assistant"]{bottom:calc(5.25rem + env(safe-area-inset-bottom))!important}button[title="AI assistant"]+div{bottom:calc(9rem + env(safe-area-inset-bottom))!important}}`}</style>
       <Routes>
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="*" element={
@@ -114,11 +119,8 @@ function Shell() {
             <AppSidebar />
             <main className="flex-1 w-full bg-slate-50 dark:bg-slate-900 relative flex flex-col min-w-0 h-[100dvh] overflow-hidden">
               <ViewAsBanner />
-              <div className="shrink-0 flex items-center gap-3 px-3 md:px-5 h-14 border-b border-border/50 bg-background/90 backdrop-blur-md md:hidden">
-                <SidebarTrigger />
-                {brandLogo ? <img src={brandLogo} alt="" className="h-7 w-auto object-contain" onError={(e) => { const el = e.target as HTMLImageElement; el.style.display = "none"; (el.nextSibling as HTMLElement | null)?.classList.remove("hidden"); }} /> : null}<span className={`font-bold truncate ${brandLogo ? "hidden" : ""}`}>{brandName}</span>
-              </div>
-              <div className="flex-1 overflow-y-auto">
+              <TopBar />
+              <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/inventory" element={<Inventory />} />
@@ -179,10 +181,37 @@ function Shell() {
                   <Route path="/rescue" element={<DealRescue />} />
                   <Route path="/notifications" element={<Notifications />} />
                   <Route path="/system-check" element={<SystemCheck />} />
+                  {/* Original (demo) URLs → real routes */}
+                  <Route path="/crm" element={<Navigate to="/customers" replace />} />
+                  <Route path="/customer-360" element={<Navigate to="/customers" replace />} />
+                  <Route path="/dashboard-builder" element={<Navigate to="/my-dashboard" replace />} />
+                  <Route path="/ai-follow-up" element={<Navigate to="/follow-up" replace />} />
+                  <Route path="/deal-rescue" element={<Navigate to="/rescue" replace />} />
+                  <Route path="/virtual-bdc" element={<Navigate to="/bdc" replace />} />
+                  <Route path="/video-messages" element={<Navigate to="/videos" replace />} />
+                  <Route path="/texting-templates" element={<Navigate to="/templates" replace />} />
+                  <Route path="/spiff-board" element={<Navigate to="/leaderboard" replace />} />
+                  <Route path="/gamification" element={<Navigate to="/leaderboard" replace />} />
+                  <Route path="/hall-of-fame" element={<Navigate to="/leaderboard" replace />} />
+                  <Route path="/inventory-pricing" element={<Navigate to="/pricing" replace />} />
+                  <Route path="/aging-inventory" element={<Navigate to="/aging" replace />} />
+                  <Route path="/photo-studio" element={<Navigate to="/photos" replace />} />
+                  <Route path="/lot-management" element={<Navigate to="/lot" replace />} />
+                  <Route path="/credit-app" element={<Navigate to="/credit-apps" replace />} />
+                  <Route path="/deal-jacket" element={<Navigate to="/deals" replace />} />
+                  <Route path="/service-scheduler" element={<Navigate to="/service" replace />} />
+                  <Route path="/service-reminders" element={<Navigate to="/service/reminders" replace />} />
+                  <Route path="/technician-bay" element={<Navigate to="/service/bay" replace />} />
+                  <Route path="/parts-department" element={<Navigate to="/parts" replace />} />
+                  <Route path="/command-center" element={<Navigate to="/command" replace />} />
+                  <Route path="/security-center" element={<Navigate to="/security" replace />} />
+                  <Route path="/deal-heatmap" element={<Navigate to="/heatmap" replace />} />
+                  <Route path="/crm/workflows" element={<Navigate to="/workflows" replace />} />
                   <Route path="/index.html" element={<Navigate to="/" replace />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </div>
+              <MobileBottomNav />
             </main>
           </SidebarProvider>
         } />

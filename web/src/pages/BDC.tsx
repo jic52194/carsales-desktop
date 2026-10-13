@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Phone, PhoneMissed, Voicemail, CalendarCheck, ThumbsDown, MessageCircle, Headset, FileText, CheckCircle2 } from "lucide-react";
+import { Phone, PhoneMissed, Voicemail, CalendarCheck, ThumbsDown, MessageCircle, Headset, FileText, CheckCircle2, MessageSquare, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { useCollection, insert, update, get, fullName, fmtDateTime, logActivity, type Lead, type Task, type Appointment } from "@/lib/store";
 import { useInventory, vTitle } from "@/lib/inventory";
@@ -14,6 +14,9 @@ import { useRecords, addRecord } from "@/lib/records";
 import { useAuth, useUsers } from "@/lib/auth";
 import { useTenant } from "@/lib/tenant";
 import { mergeTemplate, type Template } from "@/pages/TextingTemplates";
+import { ComposeMessage } from "@/components/ComposeMessage";
+import { BookGhlDialog } from "@/components/BookGhlDialog";
+import { useGhlStatus, type GhlChannel } from "@/lib/ghl";
 
 export type CallOutcome = "no_answer" | "left_vm" | "talked" | "appointment_set" | "not_interested";
 export interface CallLog { customerId: string; leadId?: string; taskId?: string; appointmentId?: string; outcome: CallOutcome; notes: string; by?: string; at: string }
@@ -49,6 +52,9 @@ export default function BDC() {
   const [notes, setNotes] = useState("");
   const [scriptId, setScriptId] = useState("");
   const [busy, setBusy] = useState(false);
+  const [compose, setCompose] = useState<GhlChannel | null>(null);
+  const [booking, setBooking] = useState(false);
+  const ghl = useGhlStatus();
 
   const queue = useMemo<QueueItem[]>(() => {
     const now = Date.now(); const items: QueueItem[] = [];
@@ -130,7 +136,9 @@ export default function BDC() {
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   {customer.phone ? <Button asChild size="lg"><a href={`tel:${customer.phone}`} onClick={() => logActivity("call_started", "customer", customer.id, undefined, user?.id)}><Phone className="h-4 w-4 mr-1" /> Call {customer.phone}</a></Button> : <Button size="lg" disabled><Phone className="h-4 w-4 mr-1" /> No phone on file</Button>}
-                  {customer.email && <Button asChild variant="outline"><a href={`mailto:${customer.email}`}>Email</a></Button>}
+                  <Button variant="outline" onClick={() => setCompose("sms")} disabled={!customer.phone} title={customer.phone ? "" : "No phone number on file"}><MessageSquare className="h-4 w-4 mr-1" /> Text</Button>
+                  <Button variant="outline" onClick={() => setCompose("email")} disabled={!customer.email} title={customer.email ? "" : "No email on file"}><Mail className="h-4 w-4 mr-1" /> Email</Button>
+                  {ghl.connected && <Button variant="outline" onClick={() => setBooking(true)}><CalendarCheck className="h-4 w-4 mr-1" /> Book in GHL</Button>}
                 </div>
                 {sel.lead?.notes && <p className="rounded bg-muted p-2 text-sm whitespace-pre-wrap">{sel.lead.notes}</p>}
                 {history.length > 0 && <div className="text-xs text-muted-foreground space-y-0.5"><p className="font-semibold">Recent calls</p>{history.map((h) => <p key={h.id}>{fmtDateTime(h.data.at)} · {OUTCOMES.find((o) => o.key === h.data.outcome)?.label} · {users.find((u) => u.id === h.data.by)?.fullName ?? ""}{h.data.notes ? ` — ${h.data.notes}` : ""}</p>)}</div>}
@@ -166,6 +174,9 @@ export default function BDC() {
           </Card>
         </div>
       </div>
+
+      <ComposeMessage open={!!compose} onOpenChange={(o) => !o && setCompose(null)} customer={customer} defaultChannel={compose ?? "sms"} vehicleId={vehicle?.id} activity={sel?.lead ? { entity: "lead", id: sel.lead.id } : undefined} />
+      {customer && <BookGhlDialog open={booking} onOpenChange={setBooking} customerId={customer.id} vehicleId={vehicle?.id} defaultType={sel?.appt?.type === "delivery" ? "delivery" : "test_drive"} />}
     </div>
   );
 }

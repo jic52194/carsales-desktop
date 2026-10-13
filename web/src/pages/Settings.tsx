@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +28,8 @@ export default function Settings() {
   const tenant = useTenant();
   const { user, account, viewAs, hasPermission, startViewAs, locations } = useAuth();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") || "dealership";
   const isAdmin = hasPermission(["admin"]);
   const canViewAs = !viewAs && (account?.role === "owner" || account?.role === "super_admin");
   const [viewFor, setViewFor] = useState<User | null>(null);
@@ -88,7 +90,7 @@ export default function Settings() {
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-5xl mx-auto">
       <div><h1 className="text-3xl font-black">Settings</h1><p className="text-muted-foreground">{tenant.name}</p></div>
-      <Tabs defaultValue="dealership">
+      <Tabs value={tab} onValueChange={(v) => setParams(v === "dealership" ? {} : { tab: v }, { replace: true })}>
         <TabsList className="w-full justify-start overflow-x-auto"><TabsTrigger value="dealership">Dealership</TabsTrigger><TabsTrigger value="branding">Branding</TabsTrigger>{isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}{isAdmin && <TabsTrigger value="stores">Stores</TabsTrigger>}<TabsTrigger value="connections">Connections</TabsTrigger><TabsTrigger value="security">Security</TabsTrigger>{isAdmin && <TabsTrigger value="data">Data</TabsTrigger>}</TabsList>
 
         <TabsContent value="dealership"><Card><CardHeader><CardTitle>Dealership information</CardTitle><CardDescription>{onboarding && !onboarding.preview ? `Confirmed by ${onboarding.completedByName || "dealer admin"} on ${new Date(onboarding.at).toLocaleDateString()}` : "Not yet confirmed by the dealership — the owner/admin will be asked on first sign-in."}</CardDescription></CardHeader>

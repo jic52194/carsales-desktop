@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { useTenant } from "@/lib/tenant";
 import { useInventory, vTitle, vDaysInStock } from "@/lib/inventory";
 import { useCollection, money, fmtDateTime, fullName, get } from "@/lib/store";
+import { MorningBrief } from "@/components/MorningBrief";
 
 function Stat({ label, value, sub, icon: Icon, to }: { label: string; value: string | number; sub?: string; icon: any; to: string }) {
   return (
@@ -73,6 +74,8 @@ export default function Dashboard() {
           <Button asChild><Link to="/desking"><Plus className="h-4 w-4 mr-1" /> New Deal</Link></Button>
         </div>
       </div>
+
+      {isMgr && <MorningBrief />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat label="Units in stock" value={available.length} sub={`${money(invValue)} at asking price`} icon={Car} to="/inventory" />
