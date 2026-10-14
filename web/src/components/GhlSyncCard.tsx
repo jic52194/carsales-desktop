@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeftRight, Copy, Loader2, CheckCircle2, AlertTriangle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useTenant } from "@/lib/tenant";
-import { SUPABASE_URL } from "@/lib/supabase";
+import { SUPABASE_URL, supabase } from "@/lib/supabase";
 import { ghlPipelines, ghlSavePipeline, ghlErrorMessage, useGhlStatus, refreshGhlStatus, type GhlPipeline, type GhlStage } from "@/lib/ghl";
 
 const APP_STAGES: { key: string; label: string; guess: RegExp }[] = [
@@ -36,6 +36,8 @@ export default function GhlSyncCard({ isAdmin }: { isAdmin: boolean }) {
   const [map, setMap] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [viaApp, setViaApp] = useState(false);
+  useEffect(() => { supabase.from("integrations").select("config").eq("provider", "ghl").maybeSingle().then(({ data }) => setViaApp((data as any)?.config?.via === "app")); }, [st.connected]);
 
   const load = async () => {
     setErr(null);
@@ -99,7 +101,12 @@ export default function GhlSyncCard({ isAdmin }: { isAdmin: boolean }) {
           </>)}
         </section>
 
-        <section className="space-y-3">
+        {viaApp ? (
+          <section className="space-y-1.5">
+            <p className="font-semibold text-sm">2 · GoHighLevel → here</p>
+            <p className="text-sm flex items-start gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" /> Connected through the CarSales AI OS app — texts, calls, voicemails, appointments, pipeline moves and Voice AI call summaries arrive automatically. Nothing to set up in GoHighLevel.</p>
+          </section>
+        ) : <section className="space-y-3">
           <p className="font-semibold text-sm">2 · GoHighLevel workflows → here</p>
           <p className="text-xs text-muted-foreground">For each one: GoHighLevel → Automation → Create workflow → add the trigger → add action <b>Webhook</b> (POST) with the URL → Publish.</p>
           {!key ? <p className="text-sm text-muted-foreground">Sign out and back in to load your dealership's URLs.</p> : EVENTS.map((e) => {
@@ -112,7 +119,7 @@ export default function GhlSyncCard({ isAdmin }: { isAdmin: boolean }) {
               </div>
             );
           })}
-        </section>
+        </section>}
         <p className="text-xs text-muted-foreground">Texts you send from the GoHighLevel app already appear in each customer's Inbox thread here. Connection health is checked every hour — if the token breaks you'll get an alert in the bell.{st.health ? ` Last check ${new Date(st.health.checked_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}.` : ""}</p>
       </CardContent>
     </Card>
