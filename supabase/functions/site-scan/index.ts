@@ -136,7 +136,7 @@ Deno.serve(async (req) => {
   const host = new URL(base).hostname.replace(/^www\./, "").split(".")[0].toLowerCase();
   const GENERIC = /car dealer|dealership in|used cars?|new cars?|for sale|home\b|welcome|inventory|^\s*$|\bin [A-Z][a-z]+,? [A-Z]{2}\b/i;
   const scored = [...new Set((acc._names as string[]).map((n) => clean(n).replace(/\s*(home|welcome|logo)\s*$/i, "")).filter((n) => n.length > 2 && n.length < 60))]
-    .map((n) => { const squash = n.toLowerCase().replace(/[^a-z0-9]/g, ""); let sc = 0; if (host.includes(squash) || squash.includes(host)) sc += 6; else { const words = n.toLowerCase().split(/\W+/).filter((w) => w.length > 2); sc += words.filter((w) => host.includes(w)).length * 2; } if (GENERIC.test(n)) sc -= 5; return { n, sc }; })
+    .map((n) => { const squash = n.toLowerCase().replace(/[^a-z0-9]/g, ""); let sc = 0; if (host.includes(squash) || squash.includes(host)) sc += 6; else { const words = n.toLowerCase().split(/\W+/).filter((w) => w.length > 2); sc += words.filter((w) => host.includes(w)).length * 2; } if (GENERIC.test(n)) sc -= 5; if (/click|directions|call us|visit us|contact|map\b|get approved|apply/i.test(n)) sc -= 9; sc -= n.length / 25; return { n, sc }; })
     .sort((a, b) => b.sc - a.sc);
   const name = scored[0]?.n ?? host;
   const found = (name ? 1 : 0) + ["phone", "email", "logoUrl"].filter((k) => acc[k]).length + (acc.address?.street ? 1 : 0) + (Object.keys(acc.hours).length ? 1 : 0) + (ranked.length ? 1 : 0);

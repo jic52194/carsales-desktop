@@ -10,6 +10,7 @@ import { LoginScreen } from "@/components/LoginScreen";
 import { ChangePasswordScreen } from "@/components/ChangePasswordScreen";
 import { TwoFactorScreen } from "@/components/TwoFactorScreen";
 import { ViewAsBanner } from "@/components/ViewAsBanner";
+import DemoBanner from "@/components/DemoBanner";
 import { OnboardingGate } from "@/components/OnboardingGate";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { AiPanel } from "@/components/AiPanel";
@@ -118,6 +119,7 @@ function Shell() {
             <AppSidebar />
             <main className="flex-1 w-full bg-slate-50 dark:bg-slate-900 relative flex flex-col min-w-0 h-[100dvh] overflow-hidden">
               <ViewAsBanner />
+              <DemoBanner />
               <TopBar />
               <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
                 <Routes>

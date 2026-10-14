@@ -82,7 +82,7 @@ export function tenantFromRow(r: any): Tenant {
     social: r.social ?? {}, googleMapsUrl: undefined, financing: r.financing ?? { notes: [] }, disclaimers: r.disclaimers ?? [],
     inventorySource: r.inventory_source ?? undefined, plan: r.plan ?? "starter", subscribedAt: r.created_at ?? "", seedVersion: 0,
     aiVoice: r.ai_voice ?? { preset: "professional", scope: "staff" },
-    ...( { onboarding: r.onboarding ?? null, intakeKey: r.intake_key ?? null, automationKey: r.automation_key ?? null } as any ),
+    ...( { onboarding: r.onboarding ?? null, intakeKey: r.intake_key ?? null, automationKey: r.automation_key ?? null, isDemo: !!r.is_demo, demoResetAt: r.demo_reset_at ?? null } as any ),
   };
 }
 export function setLiveTenant(row: any) {
