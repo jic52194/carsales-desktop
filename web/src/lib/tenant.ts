@@ -31,7 +31,12 @@ export interface Tenant {
   plan: "trial" | "starter" | "pro" | "enterprise";
   subscribedAt: string;
   seedVersion: number;   // bump to re-seed inventory/customers on next launch
+  aiVoice?: AiVoice;     // brand voice for the AI assistant (Settings → AI Voice)
 }
+
+export type AiVoicePreset = "professional" | "friendly" | "felipe" | "custom";
+export type AiVoiceScope = "staff" | "light" | "everywhere";
+export interface AiVoice { preset: AiVoicePreset; scope: AiVoiceScope; name?: string; persona?: string }
 
 export const DEMO_TENANT: Tenant = {
   id: "demo",
@@ -70,6 +75,7 @@ export function tenantFromRow(r: any): Tenant {
     logoUrl: r.logo_url ?? "", colors: r.colors ?? { primary: "#2563eb", secondary: "#0f172a", accent: "#f59e0b" },
     social: r.social ?? {}, googleMapsUrl: undefined, financing: r.financing ?? { notes: [] }, disclaimers: r.disclaimers ?? [],
     inventorySource: r.inventory_source ?? undefined, plan: r.plan ?? "starter", subscribedAt: r.created_at ?? "", seedVersion: 0,
+    aiVoice: r.ai_voice ?? { preset: "professional", scope: "staff" },
     ...( { onboarding: r.onboarding ?? null, intakeKey: r.intake_key ?? null } as any ),
   };
 }
@@ -120,6 +126,7 @@ export async function saveTenantOverrides(patch: Partial<Tenant>) {
   if (patch.logoUrl !== undefined) row.logo_url = patch.logoUrl;
   if (patch.colors !== undefined) row.colors = patch.colors;
   if (patch.hours !== undefined) row.hours = patch.hours;
+  if (patch.aiVoice !== undefined) row.ai_voice = patch.aiVoice;
   if (cur.dbId) {
     const { supabase } = await import("@/lib/supabase");
     const { data, error } = await supabase.from("tenants").update(row).eq("id", cur.dbId).select().single();

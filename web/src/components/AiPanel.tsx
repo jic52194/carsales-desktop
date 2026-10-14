@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Sparkles, X, Send, Loader2, Copy } from "lucide-react";
+import { useAiVoice } from "@/lib/voices";
 import { toast } from "sonner";
 import { askAi, AiNotConfigured, type AiMessage, type AiTask } from "@/lib/ai";
 import { useAuth } from "@/lib/auth";
@@ -11,6 +12,7 @@ import { useAuth } from "@/lib/auth";
 export function AiPanel() {
   const { user, hasPermission } = useAuth();
   const loc = useLocation();
+  const ai = useAiVoice();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState("");
@@ -49,12 +51,12 @@ export function AiPanel() {
 
   return (
     <>
-      <button onClick={() => setOpen((o) => !o)} className="fixed bottom-5 right-5 z-[80] h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:scale-105 transition-transform" title="AI assistant">
+      <button onClick={() => setOpen((o) => !o)} className="fixed bottom-5 right-5 z-[80] h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:scale-105 transition-transform" title={ai.named ? `Ask ${ai.name}` : "AI assistant"} aria-label={ai.named ? `Ask ${ai.name}` : "AI assistant"}>
         {open ? <X className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
       </button>
       {open && (
         <div className="fixed bottom-20 right-5 z-[80] w-[380px] max-w-[calc(100vw-2.5rem)] h-[520px] max-h-[75vh] bg-background border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-          <div className="px-4 py-3 border-b flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><p className="font-semibold text-sm">AI assistant</p><span className="ml-auto text-[10px] text-muted-foreground">uses only your dealership's data</span></div>
+          <div className="px-4 py-3 border-b flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><p className="font-semibold text-sm">{ai.title}</p><span className="ml-auto text-[10px] text-muted-foreground">uses only your dealership's data</span></div>
           <div className="px-3 py-2 flex flex-wrap gap-1.5 border-b">
             {quick.filter((q) => q.show).map((q) => <Button key={q.task} size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => run(q.task)}>{q.label}</Button>)}
             {!quick.some((q) => q.show) && <p className="text-xs text-muted-foreground">Open a vehicle or customer for quick actions, or ask about inventory below.</p>}
@@ -71,7 +73,7 @@ export function AiPanel() {
             <div ref={endRef} />
           </div>
           <form className="p-3 border-t flex gap-2" onSubmit={(e) => { e.preventDefault(); if (!input.trim()) return; const t = input; setInput(""); run("chat", t); }}>
-            <Textarea rows={1} value={input} onChange={(e) => setInput(e.target.value)} placeholder={notConfigured ? "AI not configured yet" : "Ask about inventory, customers, next steps…"} disabled={busy || notConfigured} className="min-h-[38px] resize-none" onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); (e.currentTarget.form as HTMLFormElement).requestSubmit(); } }} />
+            <Textarea rows={1} value={input} onChange={(e) => setInput(e.target.value)} placeholder={notConfigured ? "AI not configured yet" : (ai.named ? `Ask ${ai.name} about inventory, customers, next steps…` : "Ask about inventory, customers, next steps…")} disabled={busy || notConfigured} className="min-h-[38px] resize-none" onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); (e.currentTarget.form as HTMLFormElement).requestSubmit(); } }} />
             <Button type="submit" size="icon" disabled={busy || notConfigured || !input.trim()}><Send className="h-4 w-4" /></Button>
           </form>
         </div>

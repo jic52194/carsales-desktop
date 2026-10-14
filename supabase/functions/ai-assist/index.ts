@@ -20,6 +20,32 @@ const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-5";
 const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type, apikey, x-client-info", "content-type": "application/json" };
 // feed text can carry broken emoji (lone surrogates) that Anthropic rejects with a 400
 const wf = (t: string) => (typeof (t as any).toWellFormed === "function" ? (t as any).toWellFormed() : t.replace(/[\uD800-\uDFFF]/g, ""));
+
+// ── Brand voice (Settings → AI Voice). Staff tasks always get the full voice; customer-facing tasks follow the scope. ──
+const CUSTOMER_TASKS = new Set(["follow_up_text", "follow_up_email", "vehicle_description", "reply_suggestion", "campaign_copy"]);
+const VOICES: Record<string, { name: string; staff: string; light: string; full: string }> = {
+  professional: { name: "Assistant",
+    staff: "Voice: clear, professional and efficient — like a sharp sales manager.",
+    light: "Voice: professional, warm and clear.", full: "Voice: professional, warm and clear." },
+  friendly: { name: "Assistant",
+    staff: "Voice: upbeat, casual and encouraging, like a friendly teammate on the floor. Light humor is fine.",
+    light: "Voice: warm, upbeat and neighborly — like a local family dealership.",
+    full: "Voice: warm, upbeat, casual and neighborly with a touch of humor — like a local family dealership." },
+  felipe: { name: "Felipe",
+    staff: `You are FELIPE 🇩🇴 — the world's first Dominican AI, raised in the barrio, not Silicon Valley. You speak English, Spanish, Spanglish and fluent street, and you switch naturally (mostly English so everyone follows, with Spanish/Dominican phrases sprinkled in: "loco", "mi hermano", "campeón", "klk", "tranquilo", "dale", "vamo' allá", "qué lo que"). You don't just give information — you tell people what's REALLY going on, with blunt, funny, tough-love honesty ("ChatGPT tiene los libros. Yo tengo la calle."). Roast the team lightly when they slack (missed follow-ups, aging units, unworked leads), then give the real answer and the next move. Keep it short and punchy. Never vulgar or crude, no slurs, nothing sexual, never mean about anyone's background — the attitude is love, not disrespect. Facts, numbers and names must still be 100% accurate from the data.`,
+    light: `Voice: Felipe 🇩🇴 — warm, confident and friendly with a light Dominican/Spanglish touch (one short phrase like "¡Saludos!", "mi amigo", "dale" at most). Respectful and welcoming; no teasing or slang toward the customer.`,
+    full: `Voice: FELIPE 🇩🇴 — confident, funny, street-smart Dominican charm with Spanglish sprinkled in ("¡Klk!", "mi hermano", "dale", "vamo' allá", "te tengo"). Make it fun and memorable, like a friend who knows cars. NEVER insult, roast or tease the customer, no slang that could read as rude, nothing vulgar. Stay accurate and compliant: real data only, payments are "estimated", no approval promises, keep required opt-out text.` },
+};
+function voiceFor(v: any, task: string): { name: string; text: string } {
+  const preset = v?.preset && (VOICES[v.preset] || v.preset === "custom") ? v.preset : "professional";
+  const scope = ["staff", "light", "everywhere"].includes(v?.scope) ? v.scope : "staff";
+  const custom = typeof v?.persona === "string" ? v.persona.slice(0, 2000) : "";
+  const base = preset === "custom" ? { name: v?.name || "Assistant", staff: `Voice / personality (set by the dealership): ${custom}`, light: `Voice: professional, with a light touch of this personality: ${custom}`, full: `Voice / personality (set by the dealership): ${custom}. Never insult the customer; stay accurate and compliant.` } : VOICES[preset];
+  const name = (typeof v?.name === "string" && v.name.trim()) ? v.name.trim().slice(0, 40) : base.name;
+  if (!CUSTOMER_TASKS.has(task)) return { name, text: base.staff };
+  if (scope === "staff") return { name, text: VOICES.professional.full + " (Customer-facing: keep it professional.)" };
+  return { name, text: scope === "light" ? base.light : base.full };
+}
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: cors });
 
 Deno.serve(async (req) => {
@@ -68,10 +94,12 @@ Deno.serve(async (req) => {
     dataBlock += `\nLAST 7 DAYS — LEADS: ${JSON.stringify(leads)}\nDEALS: ${JSON.stringify(deals)}\nUPCOMING APPOINTMENTS: ${JSON.stringify(appts)}\nOPEN TASKS: ${JSON.stringify(tasks)}`;
   }
 
-  const system = `You are the AI assistant inside CarSales AI OS for ${tenant.name ?? "a car dealership"} (${tenant.address?.city ?? ""}, ${tenant.address?.state ?? ""}). You are talking to ${profile.full_name ?? "a team member"} (role: ${profile.role ?? "staff"}).
+  const voice = voiceFor(body.voice && typeof body.voice === "object" ? body.voice : tenant.ai_voice, task);
+  const system = `You are ${voice.name === "Assistant" ? "the AI assistant" : voice.name + ", the AI assistant"} inside CarSales AI OS for ${tenant.name ?? "a car dealership"} (${tenant.address?.city ?? ""}, ${tenant.address?.state ?? ""}). You are talking to ${profile.full_name ?? "a team member"} (role: ${profile.role ?? "staff"}).
 Be concise, practical and specific to this dealership. Only use the dealership data provided below; never invent vehicles, prices, customers or history. If data needed isn't provided, say so.
 Tasks you help with: writing follow-up texts/emails to customers (short, friendly, compliant — no payment promises, say "estimated" for payments), vehicle descriptions for listings, answering questions about available inventory, summarizing a customer's history, suggesting next steps on a lead, and a morning brief.
 Dealership facts: phone ${tenant.phone ?? ""}, website ${tenant.website ?? ""}, hours ${JSON.stringify(tenant.hours ?? {})}. Disclaimers: ${(tenant.disclaimers ?? []).join(" ")}
+${voice.text}
 ${dataBlock}`;
 
   const prompts: Record<string, string> = {
@@ -107,6 +135,6 @@ ${dataBlock}`;
   const out = await r.json();
   const textOut = (out.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n").trim();
   // audit (service role; RLS insert policy would also allow the user, but keep it server-side)
-  await createClient(SUPABASE_URL, SERVICE_KEY).from("audit_log").insert({ tenant_id: profile.tenant_id, user_id: user.id, action: "ai_assist", entity: task, entity_id: (ctx.vehicleId || ctx.customerId || null) as any, details: { chars: textOut.length, model: MODEL } });
-  return json({ text: textOut, model: MODEL });
+  await createClient(SUPABASE_URL, SERVICE_KEY).from("audit_log").insert({ tenant_id: profile.tenant_id, user_id: user.id, action: "ai_assist", entity: task, entity_id: (ctx.vehicleId || ctx.customerId || null) as any, details: { chars: textOut.length, model: MODEL, voice: voice.name } });
+  return json({ text: textOut, model: MODEL, voice: voice.name });
 });

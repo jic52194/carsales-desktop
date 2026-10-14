@@ -12,8 +12,8 @@ export interface AiMessage { role: "user" | "assistant"; content: string }
 
 export class AiNotConfigured extends Error { code = "no_key"; constructor(msg?: string) { super(msg || AI_NOT_CONFIGURED_MSG); } }
 
-export async function askAi(task: AiTask, opts: { messages?: AiMessage[]; context?: AiContext } = {}): Promise<string> {
-  const { data, error } = await supabase.functions.invoke("ai-assist", { body: { task, messages: opts.messages ?? [], context: opts.context ?? {} } });
+export async function askAi(task: AiTask, opts: { messages?: AiMessage[]; context?: AiContext; voice?: unknown } = {}): Promise<string> {
+  const { data, error } = await supabase.functions.invoke("ai-assist", { body: { task, messages: opts.messages ?? [], context: opts.context ?? {}, ...(opts.voice ? { voice: opts.voice } : {}) } });
   if (error) {
     // supabase-js wraps non-2xx; try to read our JSON body for a clear message
     const ctx = (error as any).context as Response | undefined;

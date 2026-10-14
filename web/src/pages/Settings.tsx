@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import AiVoiceTab from "@/components/AiVoiceTab";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -91,7 +92,7 @@ export default function Settings() {
     <div className="p-4 md:p-8 space-y-6 max-w-5xl mx-auto">
       <div><h1 className="text-3xl font-black">Settings</h1><p className="text-muted-foreground">{tenant.name}</p></div>
       <Tabs value={tab} onValueChange={(v) => setParams(v === "dealership" ? {} : { tab: v }, { replace: true })}>
-        <TabsList className="w-full justify-start overflow-x-auto"><TabsTrigger value="dealership">Dealership</TabsTrigger><TabsTrigger value="branding">Branding</TabsTrigger>{isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}{isAdmin && <TabsTrigger value="stores">Stores</TabsTrigger>}<TabsTrigger value="connections">Connections</TabsTrigger><TabsTrigger value="security">Security</TabsTrigger>{isAdmin && <TabsTrigger value="data">Data</TabsTrigger>}</TabsList>
+        <TabsList className="w-full justify-start overflow-x-auto"><TabsTrigger value="dealership">Dealership</TabsTrigger><TabsTrigger value="branding">Branding</TabsTrigger>{isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}{isAdmin && <TabsTrigger value="stores">Stores</TabsTrigger>}<TabsTrigger value="ai-voice">AI Voice</TabsTrigger><TabsTrigger value="connections">Connections</TabsTrigger><TabsTrigger value="security">Security</TabsTrigger>{isAdmin && <TabsTrigger value="data">Data</TabsTrigger>}</TabsList>
 
         <TabsContent value="dealership"><Card><CardHeader><CardTitle>Dealership information</CardTitle><CardDescription>{onboarding && !onboarding.preview ? `Confirmed by ${onboarding.completedByName || "dealer admin"} on ${new Date(onboarding.at).toLocaleDateString()}` : "Not yet confirmed by the dealership — the owner/admin will be asked on first sign-in."}</CardDescription></CardHeader>
           <CardContent className="grid md:grid-cols-2 gap-3">
@@ -146,6 +147,7 @@ export default function Settings() {
             )}
           </CardContent></Card></TabsContent>}
 
+        <TabsContent value="ai-voice"><AiVoiceTab canEdit={isAdmin} /></TabsContent>
         <TabsContent value="connections"><ConnectionsTab /></TabsContent>
 
         <TabsContent value="security"><SecurityTab /></TabsContent>
