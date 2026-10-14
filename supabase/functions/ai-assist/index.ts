@@ -18,6 +18,8 @@ async function tenantKey(tenantId: string): Promise<string | null> {
 const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-5";
 
 const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type, apikey, x-client-info", "content-type": "application/json" };
+// feed text can carry broken emoji (lone surrogates) that Anthropic rejects with a 400
+const wf = (t: string) => (typeof (t as any).toWellFormed === "function" ? (t as any).toWellFormed() : t.replace(/[\uD800-\uDFFF]/g, ""));
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: cors });
 
 Deno.serve(async (req) => {
@@ -90,9 +92,18 @@ ${dataBlock}`;
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model: MODEL, max_tokens: 1024, system: sys, messages: userMsgs }),
+    body: JSON.stringify({ model: MODEL, max_tokens: 1024, system: wf(sys), messages: userMsgs.map((m) => ({ role: m.role, content: wf(String(m.content ?? "")) || "…" })) }),
   });
-  if (!r.ok) { const t = await r.text(); return json({ error: `AI request failed (${r.status})`, detail: t.slice(0, 300) }, 502); }
+  if (!r.ok) {
+    const t = await r.text();
+    let apiMsg = ""; try { apiMsg = JSON.parse(t)?.error?.message ?? ""; } catch { apiMsg = t.slice(0, 200); }
+    console.error("anthropic_error", r.status, task, apiMsg);
+    const friendly = /credit balance/i.test(apiMsg) ? "Your Anthropic account is out of credits. Add credits at console.anthropic.com → Settings → Billing, then try again."
+      : r.status === 401 ? "Anthropic rejected the API key. Paste a new key in Settings → Connections."
+      : r.status === 429 || r.status === 529 ? "The AI is busy right now — try again in a minute."
+      : `AI request failed (${r.status})${apiMsg ? ": " + apiMsg : ""}`;
+    return json({ error: friendly, detail: apiMsg.slice(0, 300) }, 502);
+  }
   const out = await r.json();
   const textOut = (out.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n").trim();
   // audit (service role; RLS insert policy would also allow the user, but keep it server-side)

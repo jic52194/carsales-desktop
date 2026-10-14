@@ -80,7 +80,7 @@ export default function PhotoStudio() {
               {list.length === 0 && <p className="p-4 text-sm text-muted-foreground text-center">Every unit has {TARGET}+ photos.</p>}
               {list.map((v) => (
                 <button key={v.id} onClick={() => setSelectedId(v.id)} className={`w-full text-left flex items-center gap-3 p-2 hover:bg-muted/40 ${v.id === selectedId ? "bg-muted" : ""}`}>
-                  <img src={vImage(v)} alt="" className="h-12 w-16 object-cover rounded bg-muted shrink-0" loading="lazy" />
+                  <img data-car src={vImage(v)} alt="" className="h-12 w-16 object-cover rounded bg-muted shrink-0" loading="lazy" />
                   <div className="min-w-0 flex-1"><p className="text-sm font-semibold truncate">{vTitle(v)}</p><p className="text-xs text-muted-foreground">#{v.stockNumber}</p></div>
                   <Badge variant={v.images.length >= TARGET ? "default" : v.images.length === 0 ? "destructive" : "secondary"}>{v.images.length}/{TARGET}</Badge>
                 </button>

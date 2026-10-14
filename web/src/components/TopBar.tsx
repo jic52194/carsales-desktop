@@ -42,8 +42,8 @@ export function TopBar() {
       <div className="hidden md:flex flex-col min-w-0 shrink">
         {mod ? (
           <>
-            <span className="text-[11px] text-muted-foreground flex items-center gap-1 leading-none">{mod.group}{sub && <><ChevronRight className="h-3 w-3" /><Link to={mod.path} className="hover:text-foreground">{mod.label}</Link></>}</span>
-            <span className="font-bold text-base truncate leading-tight mt-0.5">{sub ?? mod.label}</span>
+            <span className="text-[11px] text-muted-foreground flex items-center gap-1 leading-none whitespace-nowrap">{mod.group}{sub && <><ChevronRight className="h-3 w-3" /><Link to={mod.path} className="hover:text-foreground">{mod.label.replace(/\s*\(.*\)$/, "")}</Link></>}</span>
+            <span className="font-bold text-base truncate leading-tight mt-0.5" title={sub ?? mod.label}>{sub ?? mod.label.replace(/\s*\(.*\)$/, "")}</span>
           </>
         ) : <span className="font-bold truncate">{brandName}</span>}
       </div>

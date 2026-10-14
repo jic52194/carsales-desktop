@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { useSearchParams, Link } from "react-router-dom";
+import { useSearchParams, Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +18,7 @@ const SOURCES = ["Walk-in", "Phone", "Website", "Referral", "Facebook", "CarGuru
 const empty = { firstName: "", lastName: "", phone: "", email: "", address: "", city: "", state: "MA", zip: "", source: "Walk-in", notes: "" };
 
 export default function Customers() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const customers = useCollection("customers");
   const leads = useCollection("leads");
@@ -53,8 +54,8 @@ export default function Customers() {
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div><h1 className="text-3xl font-black">Customers</h1><p className="text-muted-foreground">{customers.length} on file</p></div>
-        <div className="flex gap-2">
-          <div className="relative w-64"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Search name, phone, email" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+        <div className="flex flex-wrap gap-2">
+          <div className="relative w-full sm:w-64"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Search name, phone, email" value={q} onChange={(e) => setQ(e.target.value)} /></div>
           <Button variant="outline" onClick={() => downloadCsv(`customers-${stamp()}`, customers.map((c) => ({ first_name: c.firstName, last_name: c.lastName, phone: c.phone, email: c.email, source: c.source, created: c.createdAt })))}><Download className="h-4 w-4 mr-1" /> Export</Button>
           <Button onClick={() => { setEditing(null); setForm({ ...empty }); setOpen(true); }}><Plus className="h-4 w-4 mr-1" /> Add customer</Button>
         </div>
@@ -67,22 +68,22 @@ export default function Customers() {
           <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4 mr-1" /> Add customer</Button>
         </CardContent></Card>
       ) : (
-        <Card><CardContent className="p-0">
-          <table className="w-full text-sm">
+        <Card><CardContent className="p-0 overflow-x-auto">
+          <table className="w-full text-sm min-w-[720px]">
             <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Contact</th><th className="px-4 py-3">Source</th><th className="px-4 py-3">Open leads</th><th className="px-4 py-3">Added</th><th className="px-4 py-3"></th></tr></thead>
             <tbody className="divide-y">
               {rows.map((c) => {
                 const open = leads.filter((l) => l.customerId === c.id && !["sold", "lost"].includes(l.stage)).length;
                 return (
-                  <tr key={c.id} className="hover:bg-muted/30">
+                  <tr key={c.id} className="hover:bg-muted/30 cursor-pointer" onClick={(e) => { if (!(e.target as HTMLElement).closest("a,button")) navigate(`/customers/${c.id}`); }}>
                     <td className="px-4 py-3 font-semibold"><Link to={`/customers/${c.id}`} className="hover:text-primary hover:underline">{fullName(c)}</Link>{c.city && <span className="block text-xs font-normal text-muted-foreground">{c.city}, {c.state}</span>}</td>
-                    <td className="px-4 py-3 text-muted-foreground"><div className="flex flex-col gap-0.5">{c.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{c.phone}</span>}{c.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{c.email}</span>}</div></td>
+                    <td className="px-4 py-3 text-muted-foreground"><div className="flex flex-col gap-0.5">{c.phone && <a href={`tel:${c.phone}`} className="flex items-center gap-1 hover:text-primary w-fit"><Phone className="h-3 w-3" />{c.phone}</a>}{c.email && <a href={`mailto:${c.email}`} className="flex items-center gap-1 hover:text-primary w-fit"><Mail className="h-3 w-3" />{c.email}</a>}</div></td>
                     <td className="px-4 py-3"><Badge variant="outline">{c.source || "—"}</Badge></td>
-                    <td className="px-4 py-3">{open ? <Badge>{open}</Badge> : <span className="text-muted-foreground">0</span>}</td>
+                    <td className="px-4 py-3">{open ? <Badge variant="secondary">{open}</Badge> : <span className="text-muted-foreground">0</span>}</td>
                     <td className="px-4 py-3 text-muted-foreground">{fmtDate(c.createdAt)}</td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <Button size="sm" variant="ghost" asChild><Link to={`/leads?customer=${c.id}`}><Kanban className="h-4 w-4" /></Link></Button>
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" asChild title="Start a lead for this customer" aria-label="New lead"><Link to={`/leads?customer=${c.id}`}><Kanban className="h-4 w-4" /></Link></Button>
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(c)} title="Edit customer" aria-label="Edit customer"><Pencil className="h-4 w-4" /></Button>
                     </td>
                   </tr>
                 );

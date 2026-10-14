@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -68,9 +69,9 @@ export default function Appointments() {
               return (
                 <div key={a.id} className="px-4 py-3 flex flex-col md:flex-row md:items-center gap-2">
                   <p className="w-24 font-semibold">{new Date(a.startsAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</p>
-                  <div className="flex-1"><p className="font-semibold">{fullName(c)} <span className="font-normal text-muted-foreground">· {TYPES.find((t) => t[0] === a.type)?.[1]}</span></p><p className="text-xs text-muted-foreground">{v ? vTitle(v) : ""}{a.notes ? ` — ${a.notes}` : ""}</p></div>
+                  <div className="flex-1"><p className="font-semibold">{c ? <Link to={`/customers/${c.id}`} className="hover:text-primary hover:underline">{fullName(c)}</Link> : "Walk-in / no customer"} <span className="font-normal text-muted-foreground">· {TYPES.find((t) => t[0] === a.type)?.[1]}</span></p><p className="text-xs text-muted-foreground">{v ? vTitle(v) : ""}{a.notes ? ` — ${a.notes}` : ""}</p></div>
                   <p className="text-xs text-muted-foreground">{users.find((u) => u.id === a.assignedTo)?.fullName}</p>
-                  <Select value={a.status} onValueChange={(s) => update("appointments", a.id, { status: s as any }).catch((e) => toast.error(e.message))}><SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger><SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace("_", " ")}</SelectItem>)}</SelectContent></Select>
+                  <Select value={a.status} onValueChange={(s) => update("appointments", a.id, { status: s as any }).catch((e) => toast.error(e.message))}><SelectTrigger className={`w-36 h-8 capitalize ${a.status === "confirmed" || a.status === "showed" ? "border-emerald-300 text-emerald-700" : a.status === "no_show" || a.status === "cancelled" ? "text-muted-foreground" : ""}`}><SelectValue /></SelectTrigger><SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace("_", " ")}</SelectItem>)}</SelectContent></Select>
                 </div>
               );
             })}

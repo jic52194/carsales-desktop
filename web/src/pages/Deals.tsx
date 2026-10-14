@@ -50,7 +50,7 @@ export default function Deals() {
 
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h1 className="text-3xl font-black">Deals</h1><p className="text-muted-foreground">{rows.length} shown · {money(rows.reduce((a, d) => a + (d.totalGross || 0), 0))} gross</p></div>
         <div className="flex gap-2">
           <Select value={filter} onValueChange={(v: any) => setFilter(v)}><SelectTrigger className="w-44"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="all">All</SelectItem>{STATUS.map((s) => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent></Select>
@@ -70,7 +70,7 @@ export default function Deals() {
                     <td className="px-4 py-3 text-right">{money(d.sellingPrice)}</td><td className="px-4 py-3 text-right">{money(d.monthlyPayment)}/mo</td>
                     <td className={`px-4 py-3 text-right font-semibold ${d.totalGross < 0 ? "text-destructive" : ""}`}>{money(d.totalGross)}</td>
                     <td className="px-4 py-3"><Badge variant="outline" className={s.cls}>{s.label}</Badge></td><td className="px-4 py-3 text-muted-foreground">{fmtDate(d.updatedAt)}</td>
-                    <td className="px-4 py-3"><Button size="sm" variant="ghost" asChild onClick={(e) => e.stopPropagation()}><Link to={`/desking?deal=${d.id}`}><Pencil className="h-4 w-4" /></Link></Button></td>
+                    <td className="px-4 py-3"><Button size="sm" variant="ghost" asChild onClick={(e) => e.stopPropagation()} title="Open in Desking" aria-label="Open in Desking"><Link to={`/desking?deal=${d.id}`}><Pencil className="h-4 w-4" /></Link></Button></td>
                   </tr>);
               })}
             </tbody>

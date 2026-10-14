@@ -89,7 +89,7 @@ export default function Inventory() {
           {rows.map((v) => (
             <Link key={v.id} to={`/inventory/${v.id}`} className="block">
               <Card className="overflow-hidden h-full hover:shadow-md transition-shadow">
-                <div className="aspect-[4/3] bg-muted relative"><img src={vImage(v)} alt={vTitle(v)} className="w-full h-full object-cover" loading="lazy" />
+                <div className="aspect-[4/3] bg-muted relative"><img data-car src={vImage(v)} alt={vTitle(v)} className="w-full h-full object-cover" loading="lazy" />
                   <Badge className="absolute top-2 left-2" variant={v.status === "Available" ? "default" : "secondary"}>{v.status}</Badge>
                   {vDaysInStock(v) > 60 && <Badge variant="destructive" className="absolute top-2 right-2">{vDaysInStock(v)}d</Badge>}
                 </div>

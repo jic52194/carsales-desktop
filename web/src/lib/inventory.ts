@@ -40,7 +40,7 @@ export interface Vehicle {
 
 const KEY = () => `cso:${getTenantId()}:vehicles`;
 const EVT = "cso:inventory-changed";
-export const PLACEHOLDER_IMG = "/placeholder.svg";
+export const PLACEHOLDER_IMG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300'><rect width='400' height='300' fill='%23f1f5f9'/><g fill='none' stroke='%2394a3b8' stroke-width='8' stroke-linecap='round' stroke-linejoin='round' transform='translate(140 105)'><path d='M10 60V45l12-28a10 10 0 0 1 9-6h58a10 10 0 0 1 9 6l12 28v15a5 5 0 0 1-5 5H15a5 5 0 0 1-5-5z'/><circle cx='32' cy='66' r='9'/><circle cx='88' cy='66' r='9'/><path d='M14 42h92'/></g><text x='200' y='225' text-anchor='middle' font-family='system-ui,sans-serif' font-size='18' fill='%2394a3b8'>Photos coming soon</text></svg>";
 
 function fromRow(r: any): Vehicle {
   return {

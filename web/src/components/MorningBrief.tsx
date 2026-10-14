@@ -35,14 +35,14 @@ export function MorningBrief() {
   return (
     <Card className="border-primary/30">
       <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 space-y-0 pb-3">
-        <div><CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" /> Morning brief</CardTitle><CardDescription>{brief ? `Generated ${new Date(brief.at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} from your live leads, deals, appointments and tasks` : "What came in, what's hot, what's overdue — written from your real data."}</CardDescription></div>
+        <div><CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" /> Morning brief</CardTitle><CardDescription>{brief ? `Generated ${new Date(brief.at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} from your live leads, deals, appointments and tasks` : "What came in, what's hot, what's overdue — written from your real data in about 10 seconds."}</CardDescription></div>
         {!notConfigured && <Button size="sm" variant={brief ? "outline" : "default"} onClick={run} disabled={busy}>{busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : brief ? <RefreshCw className="h-4 w-4 mr-1" /> : <Sparkles className="h-4 w-4 mr-1" />} {brief ? "Refresh" : "Get today's brief"}</Button>}
       </CardHeader>
-      <CardContent>
+      <CardContent className={!brief && !busy && !note && !notConfigured ? "hidden" : undefined}>
         {notConfigured ? <p className="text-sm text-muted-foreground">{AI_NOT_CONFIGURED_MSG}</p> : (
           <>
             {note && <p className="text-sm rounded-md border border-amber-300 bg-amber-50 text-amber-900 p-2 mb-2">{note}</p>}
-            {brief ? <p className="text-sm whitespace-pre-wrap leading-relaxed">{brief.text}</p> : !busy && <p className="text-sm text-muted-foreground">Click <b>Get today's brief</b> — takes about 10 seconds.</p>}
+            {brief ? <p className="text-sm whitespace-pre-wrap leading-relaxed">{brief.text}</p> : null}
             {busy && !brief && <p className="text-sm text-muted-foreground">Reading today's numbers…</p>}
           </>
         )}

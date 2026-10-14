@@ -51,7 +51,7 @@ export default function VDP() {
 
   if (!v) return <div className="p-8"><Button variant="ghost" onClick={() => navigate("/inventory")}><ArrowLeft className="h-4 w-4 mr-1" /> Inventory</Button><p className="mt-6 text-muted-foreground">Vehicle not found.</p></div>;
   const imgs = v.images.length ? v.images : [PLACEHOLDER_IMG];
-  const spec = (l: string, val?: string | number | null) => <div><p className="text-xs text-muted-foreground">{l}</p><p className="font-semibold">{val || "—"}</p></div>;
+  const spec = (l: string, val?: string | number | null) => <div className="min-w-0"><p className="text-xs text-muted-foreground">{l}</p><p className={`font-semibold ${l === "VIN" ? "font-mono text-sm break-all" : "break-words"}`}>{val || "—"}</p></div>;
   const saveEdit = async () => { if (!edit) return; try { await upsertVehicle({ ...edit, price: edit.price === null || isNaN(Number(edit.price)) ? null : Number(edit.price), cost: edit.cost == null || isNaN(Number(edit.cost)) ? null : Number(edit.cost), mileage: Number(edit.mileage) || 0 }); toast.success("Saved"); setEdit(null); } catch (e: any) { toast.error(e.message || "Could not save"); } };
 
   return (
@@ -69,7 +69,7 @@ export default function VDP() {
       </div>
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <Card className="overflow-hidden"><div className="relative aspect-[16/10] bg-muted"><img src={imgs[i]} alt={vTitle(v)} className="w-full h-full object-cover" />
+          <Card className="overflow-hidden"><div className="relative aspect-[16/10] bg-muted"><img data-car src={imgs[i]} alt={vTitle(v)} className="w-full h-full object-cover" />
             {imgs.length > 1 && <><Button size="icon" variant="secondary" className="absolute left-2 top-1/2 -translate-y-1/2" onClick={() => setI((i - 1 + imgs.length) % imgs.length)}><ChevronLeft /></Button><Button size="icon" variant="secondary" className="absolute right-2 top-1/2 -translate-y-1/2" onClick={() => setI((i + 1) % imgs.length)}><ChevronRight /></Button><span className="absolute bottom-2 right-2 text-xs bg-black/60 text-white px-2 py-0.5 rounded">{i + 1}/{imgs.length}</span></>}
           </div></Card>
           <Card><CardHeader><CardTitle className="text-base">Specifications</CardTitle></CardHeader><CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -96,7 +96,7 @@ export default function VDP() {
           </CardContent></Card>
           <Card><CardHeader><CardTitle className="text-base">Activity</CardTitle></CardHeader><CardContent className="text-sm space-y-2">
             <p>{leads.length} lead{leads.length === 1 ? "" : "s"} · {deals.length} deal{deals.length === 1 ? "" : "s"}</p>
-            {leads.slice(0, 5).map((l) => <div key={l.id} className="flex justify-between"><span>{fullName(get("customers", l.customerId))}</span><Badge variant="secondary" className="capitalize">{l.stage}</Badge></div>)}
+            {leads.slice(0, 5).map((l) => <div key={l.id} className="flex justify-between"><Link to={`/customers/${l.customerId}`} className="hover:underline hover:text-primary">{fullName(get("customers", l.customerId))}</Link><Badge variant="secondary" className="capitalize">{l.stage}</Badge></div>)}
             {deals.slice(0, 5).map((d) => <div key={d.id} className="flex justify-between"><Link to={`/deals?open=${d.id}`} className="hover:underline">{fullName(get("customers", d.customerId))}</Link><span className="capitalize text-muted-foreground">{d.status.replace("_", " ")}</span></div>)}
             {leads.length + deals.length === 0 && <p className="text-muted-foreground">No activity on this unit yet.</p>}
           </CardContent></Card>

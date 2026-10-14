@@ -5,10 +5,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ChevronRight } from "lucide-react";
+import { Link } from "react-router-dom";
+import { get } from "@/lib/store";
 import { useCollection, insert, update, remove, fmtDateTime } from "@/lib/store";
 import { toast } from "sonner";
 import { useAuth, useUsers } from "@/lib/auth";
+
+function relatedLink(t: { relatedType?: string; relatedId?: string }): { to: string; label: string } | null {
+  if (!t.relatedId) return null;
+  if (t.relatedType === "customer") return { to: `/customers/${t.relatedId}`, label: "Open customer" };
+  if (t.relatedType === "lead") { const l: any = get("leads", t.relatedId); return l?.customerId ? { to: `/customers/${l.customerId}`, label: "Open customer" } : { to: "/leads", label: "Open lead" }; }
+  if (t.relatedType === "deal") return { to: `/deals/${t.relatedId}/jacket`, label: "Open deal" };
+  if (t.relatedType === "vehicle") return { to: `/inventory/${t.relatedId}`, label: "Open vehicle" };
+  return null;
+}
 
 export default function Tasks() {
   const { user, hasPermission } = useAuth();
@@ -33,7 +44,7 @@ export default function Tasks() {
 
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h1 className="text-3xl font-black">Tasks</h1><p className="text-muted-foreground">{open.length} open</p></div>
         {canSeeAll && <Select value={view} onValueChange={(v: any) => setView(v)}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="mine">My tasks</SelectItem><SelectItem value="all">Whole store</SelectItem></SelectContent></Select>}
       </div>
@@ -52,14 +63,16 @@ export default function Tasks() {
             <Checkbox checked={false} onCheckedChange={() => update("tasks", t.id, { status: "done" })} />
             <div className="flex-1">
               <p className="font-medium">{t.title}</p>
+              {(() => { const r = relatedLink(t); return r ? <Link to={r.to} className="text-xs text-primary hover:underline inline-flex items-center">{r.label}<ChevronRight className="h-3 w-3" /></Link> : null; })()}
               <p className="text-xs text-muted-foreground">{t.dueAt ? <span className={t.dueAt < nowIso ? "text-destructive font-semibold" : ""}>Due {fmtDateTime(t.dueAt)}</span> : "No due date"}{view === "all" && t.assignedTo ? ` · ${users.find((u) => u.id === t.assignedTo)?.fullName ?? ""}` : ""}</p>
             </div>
             {t.priority === "high" && <Badge variant="destructive">High</Badge>}
-            <Button size="icon" variant="ghost" onClick={() => remove("tasks", t.id)}><Trash2 className="h-4 w-4 text-muted-foreground" /></Button>
+            <Button size="icon" variant="ghost" title="Delete task" aria-label="Delete task" onClick={() => { const snap = { ...t }; remove("tasks", t.id); toast("Task deleted", { action: { label: "Undo", onClick: () => { const { id, createdAt, updatedAt, ...rest } = snap as any; insert("tasks", rest).catch(() => {}); } } }); }}><Trash2 className="h-4 w-4 text-muted-foreground" /></Button>
           </div>
         ))}
       </CardContent></Card>
       {done.length > 0 && (
+        <><p className="text-xs font-bold uppercase tracking-wide text-muted-foreground -mb-3">Completed</p>
         <Card><CardContent className="p-0 divide-y opacity-70">
           {done.map((t) => (
             <div key={t.id} className="flex items-center gap-3 px-4 py-2">
@@ -67,7 +80,7 @@ export default function Tasks() {
               <p className="flex-1 line-through text-sm">{t.title}</p>
             </div>
           ))}
-        </CardContent></Card>
+        </CardContent></Card></>
       )}
     </div>
   );

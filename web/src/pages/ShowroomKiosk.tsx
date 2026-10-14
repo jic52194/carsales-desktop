@@ -88,7 +88,7 @@ export default function ShowroomKiosk() {
             <Label className="text-lg">What are you here to see?</Label>
             {chosen ? (
               <div className="flex items-center gap-4 rounded-xl border p-3">
-                <img src={vImage(chosen)} alt="" className="h-20 w-28 object-cover rounded-lg" />
+                <img data-car src={vImage(chosen)} alt="" className="h-20 w-28 object-cover rounded-lg" />
                 <div className="flex-1"><p className="text-xl font-bold">{vTitle(chosen)}</p><p className="text-muted-foreground">#{chosen.stockNumber} · {vPrice(chosen)}</p></div>
                 <Button variant="outline" className="h-12" onClick={() => setForm({ ...form, vehicleId: "" })}>Change</Button>
               </div>
@@ -96,7 +96,7 @@ export default function ShowroomKiosk() {
               <>
                 <Input className="h-14 text-xl" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search our inventory — e.g. F-150, Civic" />
                 <div className="grid sm:grid-cols-2 gap-2">
-                  {picks.map((v) => <button key={v.id} onClick={() => setForm({ ...form, vehicleId: v.id })} className="flex items-center gap-3 rounded-xl border p-2 text-left hover:border-primary active:bg-primary/5"><img src={vImage(v)} alt="" className="h-14 w-20 object-cover rounded-lg" /><div className="min-w-0"><p className="font-semibold truncate">{vTitle(v)}</p><p className="text-sm text-muted-foreground">{vPrice(v)}</p></div><ChevronRight className="h-5 w-5 ml-auto text-muted-foreground" /></button>)}
+                  {picks.map((v) => <button key={v.id} onClick={() => setForm({ ...form, vehicleId: v.id })} className="flex items-center gap-3 rounded-xl border p-2 text-left hover:border-primary active:bg-primary/5"><img data-car src={vImage(v)} alt="" className="h-14 w-20 object-cover rounded-lg" /><div className="min-w-0"><p className="font-semibold truncate">{vTitle(v)}</p><p className="text-sm text-muted-foreground">{vPrice(v)}</p></div><ChevronRight className="h-5 w-5 ml-auto text-muted-foreground" /></button>)}
                   {picks.length === 0 && <p className="text-muted-foreground p-2 sm:col-span-2">Nothing matches — tell us below instead.</p>}
                 </div>
               </>
