@@ -9,7 +9,8 @@ import { ArrowLeftRight, Copy, Loader2, CheckCircle2, AlertTriangle, RefreshCw }
 import { toast } from "sonner";
 import { useTenant } from "@/lib/tenant";
 import { SUPABASE_URL, supabase } from "@/lib/supabase";
-import { ghlPipelines, ghlSavePipeline, ghlErrorMessage, useGhlStatus, refreshGhlStatus, type GhlPipeline, type GhlStage } from "@/lib/ghl";
+import { ghlPipelines, ghlSavePipeline, ghlErrorMessage, useGhlStatus, refreshGhlStatus, ghlPullAll, type GhlPipeline, type GhlStage } from "@/lib/ghl";
+import { DownloadCloud } from "lucide-react";
 
 const APP_STAGES: { key: string; label: string; guess: RegExp }[] = [
   { key: "new", label: "New", guess: /^new/i },
@@ -37,7 +38,15 @@ export default function GhlSyncCard({ isAdmin }: { isAdmin: boolean }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [viaApp, setViaApp] = useState(false);
-  useEffect(() => { supabase.from("integrations").select("config").eq("provider", "ghl").maybeSingle().then(({ data }) => setViaApp((data as any)?.config?.via === "app")); }, [st.connected]);
+  const [lastPull, setLastPull] = useState<{ at: string; out: any } | null>(null);
+  const [pulling, setPulling] = useState(false);
+  useEffect(() => { supabase.from("integrations").select("config").eq("provider", "ghl").maybeSingle().then(({ data }) => { setViaApp((data as any)?.config?.via === "app"); setLastPull((data as any)?.config?.last_pull ?? null); }); }, [st.connected]);
+  const sum = (o: Record<string, number> = {}) => Object.entries(o).filter(([k]) => !k.startsWith("skipped")).reduce((a, [, n]) => a + n, 0);
+  const pullNow = async () => {
+    setPulling(true);
+    try { const r = await ghlPullAll(); if (r.skipped) throw new Error(r.skipped); setLastPull({ at: new Date().toISOString(), out: r }); toast.success(`Pulled from GoHighLevel — ${sum(r.contacts)} contacts, ${sum(r.opportunities)} opportunities, ${sum(r.appointments)} appointments. Refresh pages to see them.`); }
+    catch (e: any) { toast.error(e.message); } finally { setPulling(false); }
+  };
 
   const load = async () => {
     setErr(null);
@@ -74,6 +83,12 @@ export default function GhlSyncCard({ isAdmin }: { isAdmin: boolean }) {
           : <Badge variant="destructive" className="gap-1 shrink-0" title={st.health.problems.join("; ")}><AlertTriangle className="h-3.5 w-3.5" /> {st.health.problems[0]}</Badge>) : null}
       </CardHeader>
       <CardContent className="space-y-6">
+        <section className="rounded-lg border p-3 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1 text-sm"><p className="font-semibold flex items-center gap-1.5"><DownloadCloud className="h-4 w-4" /> Import everything from GoHighLevel</p>
+            <p className="text-xs text-muted-foreground">Contacts → Customers, opportunities → Leads, appointments (last 30 / next 90 days) → Appointments. Matches by GHL id, phone, then email — safe to run again. Runs automatically every night at 2:40 AM.{lastPull ? ` Last run ${new Date(lastPull.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}: ${sum(lastPull.out?.contacts)} contacts, ${sum(lastPull.out?.opportunities)} opportunities, ${sum(lastPull.out?.appointments)} appointments.` : ""}</p></div>
+          {isAdmin && <Button variant="outline" onClick={pullNow} disabled={pulling}>{pulling ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <DownloadCloud className="h-4 w-4 mr-1" />} Pull now</Button>}
+        </section>
+
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-2"><p className="font-semibold text-sm">1 · Pipeline (Leads ⇄ Opportunities)</p>{saved ? <Badge className="bg-emerald-600">On · {saved.name}</Badge> : <Badge variant="outline">Off</Badge>}</div>
           {err && <p className="text-sm text-destructive">{err}</p>}

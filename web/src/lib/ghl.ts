@@ -93,3 +93,10 @@ export interface MessageRecord {
   body: string; subject?: string; at: string; by?: string | null; via?: "ghl" | "device" | "manual"; ghlMessageId?: string;
 }
 export const isInbound = (m: { direction: string }) => m.direction === "in" || m.direction === "inbound";
+
+/** Full import from the GoHighLevel sub-account: contacts → Customers, opportunities → Leads, appointments → Appointments. */
+export async function ghlPullAll(): Promise<{ ok?: boolean; skipped?: string; contacts: Record<string, number>; opportunities: Record<string, number>; appointments: Record<string, number> }> {
+  const { data, error } = await supabase.functions.invoke("ghl-pull", { body: {} });
+  if (error) { const ctx = (error as any).context as Response | undefined; let msg = error.message; try { const j = ctx ? await ctx.json() : null; if (j?.error) msg = j.error; } catch {} throw new Error(msg); }
+  return data as any;
+}
