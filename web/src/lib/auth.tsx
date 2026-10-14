@@ -1,7 +1,7 @@
 // Authentication + session on Supabase Auth. Username → email lookup via RPC, then password sign-in.
 // The hook surface (useAuth / hasPermission / ProtectedRoute) is unchanged from the local build.
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { supabase, isOnline } from "@/lib/supabase";
+import { supabase, isOnline, AUTH_401_EVT } from "@/lib/supabase";
 import { setLiveTenant, clearLiveTenant } from "@/lib/tenant";
 
 export type Role = "super_admin" | "owner" | "admin" | "manager" | "sales" | "f_and_i" | "service" | "inventory" | "web" | "porter" | "technician";
@@ -182,9 +182,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refresh().finally(() => setReady(true));
     const { data: sub } = supabase.auth.onAuthStateChange((event) => { if (event === "SIGNED_OUT") { setUser(null); clearLiveTenant(); } });
+    // A data request came back 401 (token expired while the tab slept, or the session was revoked): try one refresh,
+    // and if that fails go to the sign-in screen with a clear message instead of showing empty pages.
+    const on401 = async () => {
+      const { error } = await supabase.auth.refreshSession();
+      if (!error) { window.dispatchEvent(new CustomEvent("cso:records-changed", { detail: "*" })); return; }
+      await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+      try { sessionStorage.setItem("cso-signed-out-reason", "Your session expired — please sign in again."); } catch { /* ignore */ }
+      setUser(null); clearLiveTenant();
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") supabase.auth.getSession().catch(() => {}); };
+    window.addEventListener(AUTH_401_EVT, on401);
+    document.addEventListener("visibilitychange", onVisible);
     const on = () => { setOffline(false); refresh(); }, off = () => setOffline(true);
     window.addEventListener("online", on); window.addEventListener("offline", off);
-    return () => { sub.subscription.unsubscribe(); window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+    return () => { sub.subscription.unsubscribe(); window.removeEventListener("online", on); window.removeEventListener("offline", off); window.removeEventListener(AUTH_401_EVT, on401); document.removeEventListener("visibilitychange", onVisible); };
   }, []);
 
   const login = async (username: string, password: string) => {

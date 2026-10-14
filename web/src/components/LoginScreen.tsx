@@ -34,7 +34,7 @@ export function LoginScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => { try { const r = sessionStorage.getItem("cso-signed-out-reason"); if (r) sessionStorage.removeItem("cso-signed-out-reason"); return r; } catch { return null; } });
   const [brand, setBrand] = useState<TenantBrand | null>(null);
 
   useEffect(() => {
