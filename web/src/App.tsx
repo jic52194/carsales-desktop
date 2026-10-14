@@ -76,7 +76,7 @@ import ReportBuilder from "@/pages/ReportBuilder";
 import DashboardBuilder from "@/pages/DashboardBuilder";
 import DealHeatmap from "@/pages/DealHeatmap";
 import SecurityCenter from "@/pages/SecurityCenter";
-import WorkflowBuilder, { useWorkflowRunner } from "@/pages/WorkflowBuilder";
+import WorkflowBuilder from "@/pages/WorkflowBuilder";
 import DealRescue from "@/pages/DealRescue";
 import Notifications from "@/pages/Notifications";
 import SystemCheck from "@/pages/SystemCheck";
@@ -107,7 +107,6 @@ function Shell() {
       <OfflineIndicator />
       <AiPanel />
       <LeadNotifier />
-      <WorkflowRunner />
       <CommandPalette />
       <KeyboardShortcuts />
       {/* Keep the floating AI button clear of the phone bottom nav. */}
@@ -220,7 +219,6 @@ function Shell() {
   );
 }
 
-function WorkflowRunner() { useWorkflowRunner(); return null; }
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
