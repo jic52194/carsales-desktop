@@ -36,7 +36,13 @@ export interface Tenant {
 
 export type AiVoicePreset = "professional" | "friendly" | "felipe" | "custom";
 export type AiVoiceScope = "staff" | "light" | "everywhere";
-export interface AiVoice { preset: AiVoicePreset; scope: AiVoiceScope; name?: string; persona?: string }
+export interface AiVoice { preset: AiVoicePreset; scope: AiVoiceScope; name?: string; persona?: string;
+  /** Inbound texts: off, write a draft reply in the Inbox, or send automatically (with guardrails). */
+  autoReply?: "off" | "draft" | "auto";
+  /** Text back callers we missed (needs the missed-call GHL workflow). */
+  missedCall?: boolean;
+  /** Text the morning brief to this number at 8:15 AM. */
+  briefPhone?: string }
 
 export const DEMO_TENANT: Tenant = {
   id: "demo",
@@ -76,7 +82,7 @@ export function tenantFromRow(r: any): Tenant {
     social: r.social ?? {}, googleMapsUrl: undefined, financing: r.financing ?? { notes: [] }, disclaimers: r.disclaimers ?? [],
     inventorySource: r.inventory_source ?? undefined, plan: r.plan ?? "starter", subscribedAt: r.created_at ?? "", seedVersion: 0,
     aiVoice: r.ai_voice ?? { preset: "professional", scope: "staff" },
-    ...( { onboarding: r.onboarding ?? null, intakeKey: r.intake_key ?? null } as any ),
+    ...( { onboarding: r.onboarding ?? null, intakeKey: r.intake_key ?? null, automationKey: r.automation_key ?? null } as any ),
   };
 }
 export function setLiveTenant(row: any) {

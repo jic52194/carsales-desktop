@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import AiVoiceTab from "@/components/AiVoiceTab";
+import ImportGhlBranding from "@/components/ImportGhlBranding";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -94,7 +95,7 @@ export default function Settings() {
       <Tabs value={tab} onValueChange={(v) => setParams(v === "dealership" ? {} : { tab: v }, { replace: true })}>
         <TabsList className="w-full justify-start overflow-x-auto"><TabsTrigger value="dealership">Dealership</TabsTrigger><TabsTrigger value="branding">Branding</TabsTrigger>{isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}{isAdmin && <TabsTrigger value="stores">Stores</TabsTrigger>}<TabsTrigger value="ai-voice">AI Voice</TabsTrigger><TabsTrigger value="connections">Connections</TabsTrigger><TabsTrigger value="security">Security</TabsTrigger>{isAdmin && <TabsTrigger value="data">Data</TabsTrigger>}</TabsList>
 
-        <TabsContent value="dealership"><Card><CardHeader><CardTitle>Dealership information</CardTitle><CardDescription>{onboarding && !onboarding.preview ? `Confirmed by ${onboarding.completedByName || "dealer admin"} on ${new Date(onboarding.at).toLocaleDateString()}` : "Not yet confirmed by the dealership — the owner/admin will be asked on first sign-in."}</CardDescription></CardHeader>
+        <TabsContent value="dealership"><Card><CardHeader className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 space-y-0"><div><CardTitle>Dealership information</CardTitle><CardDescription>{onboarding && !onboarding.preview ? `Confirmed by ${onboarding.completedByName || "dealer admin"} on ${new Date(onboarding.at).toLocaleDateString()}` : "Not yet confirmed by the dealership — the owner/admin will be asked on first sign-in."}</CardDescription></div>{isAdmin && <ImportGhlBranding current={t as any} onApply={(p) => setT({ ...t, ...p })} />}</CardHeader>
           <CardContent className="grid md:grid-cols-2 gap-3">
             <div className="space-y-1"><Label>Dealership name</Label><Input value={t.name} onChange={setF("name")} disabled={!isAdmin} /></div>
             <div className="space-y-1"><Label>Legal name</Label><Input value={t.legalName} onChange={setF("legalName")} disabled={!isAdmin} /></div>
@@ -108,7 +109,7 @@ export default function Settings() {
             {isAdmin && <div className="md:col-span-2 flex gap-2"><Button onClick={saveDealer}>Save</Button><Button variant="outline" onClick={() => { resetOnboarding(); navigate("/onboarding"); }}><RotateCcw className="h-4 w-4 mr-1" /> Re-run onboarding</Button></div>}
           </CardContent></Card></TabsContent>
 
-        <TabsContent value="branding"><Card><CardHeader><CardTitle>Branding</CardTitle><CardDescription>Logo and colors shown to your team inside the app.</CardDescription></CardHeader>
+        <TabsContent value="branding"><Card><CardHeader className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 space-y-0"><div><CardTitle>Branding</CardTitle><CardDescription>Logo and colors shown to your team inside the app.</CardDescription></div>{isAdmin && <ImportGhlBranding current={t as any} onApply={(p) => setT({ ...t, ...p })} />}</CardHeader>
           <CardContent className="grid md:grid-cols-2 gap-6">
             <div className="space-y-3">
               <div className="space-y-1"><Label>Logo URL</Label><Input value={t.logoUrl} onChange={setF("logoUrl")} disabled={!isAdmin} /></div>

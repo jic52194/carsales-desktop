@@ -38,7 +38,15 @@ export type GhlChannel = "sms" | "email";
 export interface GhlThreadMessage { id: string; channel: "sms" | "email" | "call"; direction: "inbound" | "outbound"; body: string; at: string; status?: string | null }
 export interface GhlCalendar { id: string; name: string; isActive: boolean }
 
-export const ghlStatus = () => call<{ connected: boolean; locationId: string | null }>("status");
+export const ghlStatus = () => call<{ connected: boolean; locationId: string | null; pipeline?: GhlPipelineMap | null; health?: GhlHealth | null }>("status");
+export interface GhlStage { id: string; name: string }
+export interface GhlPipeline { id: string; name: string; stages: GhlStage[] }
+export interface GhlPipelineMap { id: string; name: string; stages: Record<string, string>; names: Record<string, string>; saved_at?: string }
+export interface GhlHealth { ok: boolean; problems: string[]; checked_at: string }
+export interface GhlProfile { name: string; phone: string; email: string; website: string; street: string; city: string; state: string; zip: string; logoUrl: string; timezone: string }
+export const ghlPipelines = () => call<{ ok: boolean; pipelines: GhlPipeline[]; current: GhlPipelineMap | null }>("pipelines");
+export const ghlSavePipeline = (pipeline: { id: string; name: string; stages: Record<string, GhlStage | undefined> } | null) => call<{ ok: boolean; pipeline: GhlPipelineMap | null }>("save_pipeline", { pipeline });
+export const ghlLocationProfile = () => call<{ ok: boolean; profile: GhlProfile }>("location_profile");
 export const ghlUpsertContact = (customerId: string) => call<{ ok: boolean; contactId: string }>("upsert_contact", { customerId });
 export const ghlSend = (p: { customerId: string; channel: GhlChannel; body: string; subject?: string }) => call<{ ok: boolean; messageId: string | null }>("send", p);
 export const ghlThread = (customerId: string) => call<{ ok: boolean; contactId: string; messages: GhlThreadMessage[] }>("thread", { customerId });
@@ -48,7 +56,7 @@ export const ghlBook = (p: { customerId: string; calendarId: string; startTime: 
 export const ghlSyncCustomers = (limit = 50) => call<{ ok: boolean; synced: number; skipped: number; remaining: number; errors: string[] }>("sync_customers", { limit });
 
 // ---- connection status, cached for the session, refreshed when the window regains focus ----
-export interface GhlStatus { loading: boolean; connected: boolean; locationId: string | null; error?: string }
+export interface GhlStatus { loading: boolean; connected: boolean; locationId: string | null; error?: string; pipeline?: GhlPipelineMap | null; health?: GhlHealth | null }
 let cached: GhlStatus | null = null;
 let inflight: Promise<GhlStatus> | null = null;
 let lastFetch = 0;
@@ -58,7 +66,7 @@ export function refreshGhlStatus(force = false): Promise<GhlStatus> {
   if (!force && inflight) return inflight;
   if (!force && cached && Date.now() - lastFetch < 30_000) return Promise.resolve(cached);
   inflight = ghlStatus()
-    .then((r) => ({ loading: false, connected: !!r.connected, locationId: r.locationId ?? null }))
+    .then((r) => ({ loading: false, connected: !!r.connected, locationId: r.locationId ?? null, pipeline: r.pipeline ?? null, health: r.health ?? null }))
     .catch((e) => ({ loading: false, connected: false, locationId: null, error: ghlErrorMessage(e) }))
     .then((s) => { cached = s; lastFetch = Date.now(); window.dispatchEvent(new Event(EVT)); return s; })
     .finally(() => { inflight = null; });

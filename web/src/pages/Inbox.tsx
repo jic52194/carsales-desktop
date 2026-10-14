@@ -79,6 +79,14 @@ export default function Inbox() {
 
   const customer: Customer | undefined = customers.find((c) => c.id === selectedId);
   const local = useMemo(() => messages.filter((m) => m.data?.customerId === selectedId), [messages, selectedId]);
+  // the AI's latest draft/auto-reply for this customer's newest inbound text (written by the ghl-sync "reply" job)
+  const aiNote = useMemo(() => {
+    const ins = local.filter((m) => isInbound(m.data)).sort((a, b) => String(b.data.at).localeCompare(String(a.data.at)));
+    const last = ins[0]; const d = (last?.data as any)?.aiDraft as { text: string; by: string; sent: boolean; held?: string | null } | undefined;
+    if (!d?.text) return null;
+    const answered = local.some((m) => !isInbound(m.data) && m.data.channel !== "note" && String(m.data.at) > String(last.data.at) && (m.data as any).via !== "felipe");
+    return answered && !d.sent ? null : d;
+  }, [local]);
   const thread = useMemo(() => mergeThread(local, ghl.connected ? live : []), [local, live, ghl.connected]);
   const who = (id?: string | null) => users.find((u) => u.id === id)?.fullName ?? "Staff";
 
@@ -199,6 +207,13 @@ export default function Inbox() {
                 ))}
               </CardContent>
               <div className="border-t p-4 space-y-2">
+                {aiNote && (aiNote.sent
+                  ? <p className="text-xs rounded-md border bg-muted/40 p-2 flex items-start gap-1.5"><Sparkles className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" /><span><b>{aiNote.by}</b> answered this text automatically.</span></p>
+                  : <div className="rounded-lg border border-primary/30 bg-primary/5 p-2.5 space-y-1.5">
+                      <p className="text-xs font-semibold flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5 text-primary" /> {aiNote.by} drafted a reply{aiNote.held ? ` (held: ${aiNote.held})` : ""}</p>
+                      <p className="text-sm whitespace-pre-wrap">{aiNote.text}</p>
+                      <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => { setChannel("sms"); setBody(aiNote.text); }}>Use this reply</Button></div>
+                    </div>)}
                 <div className="flex flex-wrap gap-2">
                   <Select value={channel} onValueChange={(v) => setChannel(v as MessageChannel)}><SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger><SelectContent>{(Object.keys(CH) as MessageChannel[]).map((k) => <SelectItem key={k} value={k} disabled={!canChannel(k)}>{CH[k].label}{canChannel(k) ? "" : " (none on file)"}</SelectItem>)}</SelectContent></Select>
                   {!viaGhl && channel !== "note" && <Select value={direction} onValueChange={(v) => setDirection(v as any)}><SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="out">We sent / called</SelectItem><SelectItem value="in">They replied</SelectItem></SelectContent></Select>}

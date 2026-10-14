@@ -1,6 +1,7 @@
 // ghl — the dealership's GoHighLevel sub-account, used from inside CarSales AI OS.
 // Auth: signed-in staff JWT. The Private Integration token stays server-side (integration_secrets).
 // Actions: status · upsert_contact · send (SMS/email) · thread · calendars · free_slots · book · sync_customers
+//          pipelines · save_pipeline (admin) · location_profile
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -54,7 +55,7 @@ Deno.serve(async (req) => {
 
   const { data: integ } = await admin.from("integrations").select("id,status,config").eq("tenant_id", p.tenant_id).eq("provider", "ghl").maybeSingle();
   const connected = integ?.status === "connected" && integ?.config?.locationId;
-  if (action === "status") return json({ connected: !!connected, locationId: connected ? integ!.config.locationId : null });
+  if (action === "status") return json({ connected: !!connected, locationId: connected ? integ!.config.locationId : null, pipeline: connected ? integ!.config.pipeline ?? null : null, health: integ?.config?.health ?? null });
   if (!connected) return json({ error: "GoHighLevel isn't connected yet — an admin can connect it in Settings → Connections.", code: "not_connected" }, 412);
   const { data: sec } = await admin.from("integration_secrets").select("secret").eq("integration_id", integ!.id).single();
   if (!sec?.secret) return json({ error: "GoHighLevel token missing — reconnect in Settings → Connections.", code: "not_connected" }, 412);
@@ -119,6 +120,29 @@ Deno.serve(async (req) => {
         for (const c of list ?? []) { try { await ensureContact(ctx, c.id); ok++; } catch (e) { skipped++; if (errors.length < 5) errors.push((e as Error).message); } }
         const { count } = await admin.from("customers").select("*", { count: "exact", head: true }).eq("tenant_id", ctx.tenantId).is("ghl_contact_id", null);
         return json({ ok: true, synced: ok, skipped, remaining: count ?? 0, errors });
+      }
+      case "pipelines": {
+        const r = await ghl(ctx, `/opportunities/pipelines?locationId=${encodeURIComponent(ctx.locationId)}`);
+        return json({ ok: true, pipelines: (r?.pipelines ?? []).map((p: any) => ({ id: p.id, name: p.name, stages: (p.stages ?? []).map((s: any) => ({ id: s.id, name: s.name })) })), current: integ!.config.pipeline ?? null });
+      }
+      case "save_pipeline": {
+        if (!["super_admin", "owner", "admin"].includes(ctx.role)) return json({ error: "admins only" }, 403);
+        const cfg = { ...(integ!.config ?? {}) };
+        if (!body.pipeline) { delete cfg.pipeline; }
+        else {
+          const pl = body.pipeline; const stages: Record<string, string> = {}; const names: Record<string, string> = {};
+          for (const k of ["new", "contacted", "appointment", "negotiating", "sold", "lost"]) { const v = pl.stages?.[k]; if (v?.id) { stages[k] = String(v.id); names[k] = String(v.name ?? ""); } }
+          const ids = Object.values(stages); if (new Set(ids).size !== ids.length) return json({ error: "Each GoHighLevel stage can only be used once" }, 400);
+          cfg.pipeline = { id: String(pl.id), name: String(pl.name ?? ""), stages, names, saved_at: new Date().toISOString() };
+        }
+        await admin.from("integrations").update({ config: cfg }).eq("id", integ!.id);
+        await admin.from("audit_log").insert({ tenant_id: ctx.tenantId, user_id: ctx.userId, action: "ghl_pipeline_map", entity: "integration", details: { pipeline: cfg.pipeline?.name ?? null } });
+        return json({ ok: true, pipeline: cfg.pipeline ?? null });
+      }
+      case "location_profile": {
+        const r = await ghl(ctx, `/locations/${encodeURIComponent(ctx.locationId)}`);
+        const l = r?.location ?? {}; const bz = l.business ?? {};
+        return json({ ok: true, profile: { name: bz.name || l.name || "", phone: l.phone || "", email: l.email || bz.email || "", website: bz.website || l.website || "", street: bz.address || l.address || "", city: bz.city || l.city || "", state: bz.state || l.state || "", zip: bz.postalCode || l.postalCode || "", logoUrl: l.logoUrl || bz.logoUrl || "", timezone: bz.timezone || l.timezone || "" } });
       }
       default: return json({ error: "unknown action" }, 400);
     }

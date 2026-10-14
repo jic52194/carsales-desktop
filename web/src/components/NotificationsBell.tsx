@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bell, Calendar, ListTodo, MessageSquare, UserPlus } from "lucide-react";
+import { Bell, Calendar, ListTodo, MessageSquare, UserPlus, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/lib/auth";
@@ -11,8 +11,8 @@ import { isInbound } from "@/components/AppSidebar";
 const SEEN_KEY = "cso:notif-seen";
 const H = 3_600_000;
 
-interface Item { id: string; at: string; /** when it became a notification (for unread) */ arrived: string; title: string; desc?: string; to: string; kind: "lead" | "message" | "task" | "appt" }
-const ICON = { lead: UserPlus, message: MessageSquare, task: ListTodo, appt: Calendar } as const;
+interface Item { id: string; at: string; /** when it became a notification (for unread) */ arrived: string; title: string; desc?: string; to: string; kind: "lead" | "message" | "task" | "appt" | "alert" }
+const ICON = { lead: UserPlus, message: MessageSquare, task: ListTodo, appt: Calendar, alert: AlertTriangle } as const;
 const TONE = {
   lead: "bg-primary/10 text-primary",
   message: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
@@ -38,6 +38,9 @@ export function useNotifications(): Item[] {
   const tasks = useCollection("tasks");
   const appts = useCollection("appointments");
   const messages = useRecords<{ customerId?: string; direction?: string; body?: string; at?: string; channel?: string }>("message");
+  const alerts = useRecords<{ title?: string; desc?: string; at?: string; to?: string }>("alert");
+  const { hasPermission } = useAuth();
+  const isAdmin = hasPermission(["admin"]);
   const [tick, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick((n) => n + 1), 60_000); return () => clearInterval(t); }, []);
 
@@ -68,10 +71,15 @@ export function useNotifications(): Item[] {
       const label = a.type.replace("_", " ");
       items.push({ id: `appt:${a.id}`, at: a.startsAt, arrived: new Date(start - 2 * H).toISOString(), kind: "appt", title: `${label[0].toUpperCase()}${label.slice(1)} at ${new Date(a.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`, desc: name(a.customerId), to: "/appointments" });
     }
+    if (isAdmin) for (const a of alerts) {
+      const at = a.data?.at || a.createdAt;
+      if (now - new Date(at).getTime() > 72 * H) continue;
+      items.push({ id: `alert:${a.id}`, at, arrived: at, kind: "alert", title: `⚠ ${a.data?.title ?? "Connection problem"}`, desc: a.data?.desc?.slice(0, 110), to: a.data?.to || "/system-check" });
+    }
     // Newest first.
     return items.sort((a, b) => (a.at < b.at ? 1 : -1));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customers, leads, tasks, appts, messages, user?.id, tick]);
+  }, [customers, leads, tasks, appts, messages, alerts, isAdmin, user?.id, tick]);
 }
 
 export function NotificationsBell() {

@@ -12,6 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CheckCircle2, XCircle, MinusCircle, Loader2, Play, Copy, Activity } from "lucide-react";
 import { toast } from "sonner";
+import { ghlStatus, ghlCalendars, ghlErrorMessage } from "@/lib/ghl";
+import { askAi, aiErrorMessage } from "@/lib/ai";
 
 type Status = "pass" | "fail" | "skip" | "running";
 interface Check { id: string; group: string; name: string; status: Status; detail: string; ms?: number }
@@ -58,7 +60,7 @@ const RPCS: { name: string; where: string }[] = [
 /** Helpers used by RLS policies / triggers rather than by the app directly. */
 const DB_HELPERS: string[] = ["has_role", "current_tenant_id", "current_role_name", "stamp_tenant", "touch_updated_at", "handle_new_user", "protect_profile_columns"];
 
-const EDGE_NOT_PROBED = ["sync-inventory", "ai-assist", "integrations"];
+const EDGE_NOT_PROBED = ["sync-inventory", "integrations", "ghl-inbound", "ghl-sync", "voice-brain"];
 const LAST_KEY = "cso:system-check:last";
 
 const timed = async <T,>(fn: () => Promise<T>): Promise<{ r?: T; e?: any; ms: number }> => {
@@ -133,7 +135,29 @@ export default function SystemCheck() {
     }
     for (const fn of EDGE_NOT_PROBED) add({ id: `edge:${fn}`, group: "Edge functions", name: fn, status: "skip", detail: "deployed per project doc (not probed — no safe read-only call)" });
 
-    // 5. Realtime: subscribe to leads and expect SUBSCRIBED within 5 s
+    // 5. Integrations — GoHighLevel, AI, and the last time each automation actually ran
+    {
+      const G = "Integrations";
+      const st = await timed(() => ghlStatus());
+      if (st.e) add({ id: "int:ghl", group: G, name: "GoHighLevel connection", status: "fail", detail: ghlErrorMessage(st.e), ms: st.ms });
+      else if (!st.r!.connected) add({ id: "int:ghl", group: G, name: "GoHighLevel connection", status: "skip", detail: "not connected (Settings → Connections)", ms: st.ms });
+      else {
+        const cal = await timed(() => ghlCalendars());
+        add(cal.e ? { id: "int:ghl", group: G, name: "GoHighLevel connection", status: "fail", detail: ghlErrorMessage(cal.e), ms: cal.ms } : { id: "int:ghl", group: G, name: "GoHighLevel connection", status: "pass", detail: `token works — ${cal.r!.calendars.length} calendars`, ms: cal.ms });
+        const h = st.r!.health;
+        add(h ? { id: "int:ghl-health", group: G, name: "GoHighLevel hourly health check", status: h.ok ? "pass" : h.problems.every((x) => /pipeline/.test(x)) ? "skip" : "fail", detail: `${h.ok ? "healthy" : h.problems.join("; ")} — checked ${new Date(h.checked_at).toLocaleString()}` } : { id: "int:ghl-health", group: G, name: "GoHighLevel hourly health check", status: "skip", detail: "no check recorded yet (runs at :07 each hour)" });
+        add({ id: "int:ghl-pipeline", group: G, name: "Pipeline sync", status: st.r!.pipeline ? "pass" : "skip", detail: st.r!.pipeline ? `on — ${st.r!.pipeline.name}` : "off (Settings → Connections → GoHighLevel sync)" });
+      }
+      const ai = await timed(() => askAi("chat", { messages: [{ role: "user", content: "Reply with only the word OK." }] }));
+      add(ai.e ? { id: "int:ai", group: G, name: "AI assistant", status: "fail", detail: aiErrorMessage(ai.e), ms: ai.ms } : { id: "int:ai", group: G, name: "AI assistant", status: "pass", detail: `answering (${tenant.aiVoice?.name || tenant.aiVoice?.preset || "professional"} voice)`, ms: ai.ms });
+      const LAST: [string, string, string][] = [["ghl_inbound", "Customer replies from GHL", "Customer Replied workflow"], ["ghl_event", "GHL workflow events", "appointment / opportunity / missed-call workflows"], ["ghl_opportunity_push", "Leads → GHL opportunities", "pipeline sync"], ["voice_ai_lead", "Phone agent leads", "GHL Voice AI agent"], ["lead_intake", "Website form leads", "website lead form"]];
+      for (const [action, name, what] of LAST) {
+        const r = await timed(async () => { const res = await supabase.from("audit_log").select("created_at").eq("action", action).order("created_at", { ascending: false }).limit(1); if (res.error) throw res.error; return res.data?.[0]?.created_at as string | undefined; });
+        add(r.e ? { id: `int:last:${action}`, group: G, name, status: "fail", detail: errMsg(r.e), ms: r.ms } : { id: `int:last:${action}`, group: G, name, status: r.r ? "pass" : "skip", detail: r.r ? `last received ${new Date(r.r).toLocaleString()}` : `nothing received yet (${what})`, ms: r.ms });
+      }
+    }
+
+    // 6. Realtime: subscribe to leads and expect SUBSCRIBED within 5 s
     {
       const id = "realtime:leads";
       upsert({ id, group: "Realtime", name: "leads channel", status: "running", detail: "subscribing" });

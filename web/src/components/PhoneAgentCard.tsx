@@ -51,7 +51,7 @@ function CopyBtn({ text, label }: { text: string; label?: string }) {
 
 export default function PhoneAgentCard({ voice }: { voice: AiVoice }) {
   const tenant = useTenant();
-  const key = (tenant as any).intakeKey as string | null;
+  const key = (tenant as any).automationKey as string | null;
   const [open, setOpen] = useState(false);
   const prompt = useMemo(() => phonePrompt(voice, tenant.name, tenant.address?.city ?? ""), [voice, tenant.name, tenant.address?.city]);
   const base = `${SUPABASE_URL}/functions/v1/voice-brain?key=${key ?? "YOUR-KEY"}&action=`;
@@ -87,7 +87,7 @@ export default function PhoneAgentCard({ voice }: { voice: AiVoice }) {
                 <code className="block text-[11px] bg-muted/50 rounded px-2 py-1 break-all">POST {base + a.id}</code>
               </div>
             ))}
-            <p className="text-xs text-muted-foreground">The key in these URLs only lets a caller's agent read your available inventory and hours and create a lead — the same key your website forms use. Re-copy the prompt whenever you change the voice above.</p>
+            <p className="text-xs text-muted-foreground">The key in these URLs is your private automation key (different from the website-form key) — it lets the agent read your available inventory, hours and a caller's name, and create leads. Treat it like a password. Re-copy the prompt whenever you change the voice above.</p>
           </div>
         )}
       </CardContent>

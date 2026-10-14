@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Check, Loader2, Sparkles, MessageSquare } from "lucide-react";
+import { Check, Loader2, Sparkles, MessageSquare, Bot } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useTenant, saveTenantOverrides, type AiVoice } from "@/lib/tenant";
 import { VOICE_PRESETS, VOICE_SCOPES, DEFAULT_VOICE, presetOf } from "@/lib/voices";
@@ -31,7 +32,7 @@ export default function AiVoiceTab({ canEdit }: { canEdit: boolean }) {
   const save = async () => {
     if (v.preset === "custom" && !(v.persona ?? "").trim()) return toast.error("Describe the custom voice first");
     setBusy(true);
-    try { await saveTenantOverrides({ aiVoice: { ...v, name: v.name?.trim() || undefined, persona: v.preset === "custom" ? v.persona?.trim() : undefined } }); toast.success(`AI voice saved — ${v.name?.trim() || (p.defaultName === "Assistant" ? p.label : p.defaultName)} is live`); }
+    try { await saveTenantOverrides({ aiVoice: { ...v, name: v.name?.trim() || undefined, persona: v.preset === "custom" ? v.persona?.trim() : undefined, briefPhone: v.briefPhone?.trim() || undefined } }); toast.success(`AI voice saved — ${v.name?.trim() || (p.defaultName === "Assistant" ? p.label : p.defaultName)} is live`); }
     catch (e: any) { toast.error(e.message || "Could not save"); }
     finally { setBusy(false); }
   };
@@ -110,6 +111,24 @@ export default function AiVoiceTab({ canEdit }: { canEdit: boolean }) {
           {preview && <div className="rounded-lg border bg-muted/40 p-3"><p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">{preview.who === "team" ? "To the team" : "Customer text (draft only)"}</p><p className="text-sm whitespace-pre-wrap">{preview.text}</p></div>}
         </CardContent>
       </Card>
+      {canEdit && (
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary" /> {(v.name?.trim() || p.defaultName) === "Assistant" ? "AI" : (v.name?.trim() || p.defaultName)} on autopilot</CardTitle>
+            <CardDescription>Let the AI work your GoHighLevel texts and calls. Uses your GoHighLevel connection and AI credits.</CardDescription></CardHeader>
+          <CardContent className="space-y-5">
+            <div className="space-y-2"><Label>Customer texts back</Label>
+              <div className="grid sm:grid-cols-3 gap-2">{([["off", "Off", "Your team answers every text."], ["draft", "Draft a reply", "A ready-to-send reply waits in the Inbox — one click to send."], ["auto", "Reply automatically", "Sends right away. Holds off if a person replied in the last 30 min; max 3 per customer a day; never answers STOP."]] as const).map(([id, label, detail]) => {
+                const on = (v.autoReply ?? "off") === id;
+                return <button key={id} type="button" onClick={() => setV({ ...v, autoReply: id })} aria-pressed={on} className={`text-left rounded-lg border p-3 ${on ? "border-primary bg-primary/5" : "hover:bg-muted/40"}`}><span className="font-semibold text-sm block">{label}</span><span className="text-xs text-muted-foreground">{detail}</span></button>;
+              })}</div>
+            </div>
+            <label className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer"><Switch checked={!!v.missedCall} onCheckedChange={(c) => setV({ ...v, missedCall: c })} /><span><span className="font-semibold text-sm block">Missed-call text-back</span><span className="text-xs text-muted-foreground">When a call goes unanswered, text the caller within a minute in this voice (once per 6 hours). Needs the "Missed call" workflow from Settings → Connections → GoHighLevel sync.</span></span></label>
+            <div className="space-y-1.5 max-w-sm"><Label>Text me the morning brief</Label><Input inputMode="tel" placeholder="Mobile number, e.g. 978-555-0101" value={v.briefPhone ?? ""} onChange={(e) => setV({ ...v, briefPhone: e.target.value })} />
+              <p className="text-xs text-muted-foreground">Every day at 8:15 AM: new leads, today's appointments, overdue tasks and aging units — sent from your GoHighLevel number. Leave blank to turn off.</p></div>
+            <Button onClick={save} disabled={busy || !dirty}>{busy && <Loader2 className="h-4 w-4 mr-1 animate-spin" />} {dirty ? "Save" : "Saved"}</Button>
+          </CardContent>
+        </Card>
+      )}
       {canEdit && <PhoneAgentCard voice={v} />}
     </div>
   );

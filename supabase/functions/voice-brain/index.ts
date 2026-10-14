@@ -1,8 +1,8 @@
 // voice-brain — live-call "brain" for GoHighLevel Voice AI Custom Actions (POST only).
-// One URL per action:  .../functions/v1/voice-brain?key=<dealership intake key>&action=<action>
+// One URL per action:  .../functions/v1/voice-brain?key=<dealership automation key>&action=<action>
 // Actions: search_inventory · vehicle_details · customer_lookup · create_lead · dealership_info
-// Auth = the dealership's intake key (same key the website forms use; it can only read that dealership's
-// public-facing data — available inventory, hours — and create a lead). Answers are short and speakable;
+// Auth = the dealership's private automation key (tenants.automation_key — never in public website forms). It can read that dealership's
+// available inventory, hours and a caller's name by phone, and create leads. Answers are short and speakable;
 // every response carries `say`, a plain sentence the agent can read out, plus the structured data.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
   const key = str(url.searchParams.get("key") || req.headers.get("x-intake-key"), 64);
   const action = str(url.searchParams.get("action"), 40);
   if (!key) return json({ error: "missing key" }, 401);
-  const { data: t } = await admin.from("tenants").select("id,name,phone,website,address,hours,financing,status").eq("intake_key", key).single();
+  const { data: t } = await admin.from("tenants").select("id,name,phone,website,address,hours,financing,status").eq("automation_key", key).single();
   if (!t || t.status !== "active") return json({ error: "unknown dealership" }, 401);
   const b: any = await req.json().catch(() => ({}));
   const p: any = { ...(b.parameters ?? {}), ...(b.params ?? {}), ...(b.customData ?? {}), ...b };   // GHL sends collected parameters as JSON fields
@@ -39,7 +39,8 @@ Deno.serve(async (req) => {
 
   if (action === "dealership_info") {
     const a = t.address ?? {};
-    const hours = Object.entries(t.hours ?? {}).map(([d, h]) => `${d} ${h}`).join("; ");
+    const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const hours = Object.entries(t.hours ?? {}).sort(([x], [y]) => DAYS.indexOf(x) - DAYS.indexOf(y)).map(([d, h]) => `${d} ${h}`).join("; ");
     return json({ say: `${t.name} is at ${[a.street, a.city, a.state].filter(Boolean).join(", ")}. Hours: ${hours}. Phone ${t.phone ?? ""}.`, name: t.name, address: a, hours: t.hours, phone: t.phone, website: t.website, financing_notes: t.financing?.notes ?? [] });
   }
 
@@ -112,7 +113,7 @@ Deno.serve(async (req) => {
     else if (body) { await admin.from("leads").update({ notes: `Phone call (AI): ${body}`, ...(vehicleId ? { vehicle_id: vehicleId } : {}) }).eq("id", leadId); }
     await admin.from("records").insert({ tenant_id: t.id, kind: "message", data: { customerId, channel: "call", direction: "inbound", body: body ? `AI phone call — ${body}` : "AI phone call", at: new Date().toISOString(), via: "ghl-voice-ai" } });
     await admin.from("audit_log").insert({ tenant_id: t.id, action: "voice_ai_lead", entity: "lead", entity_id: leadId, details: { customerId, vehicleId } });
-    return json({ say: `Perfect, ${first}. I've got you down${want ? " for the " + want : ""} and a salesperson will follow up${when ? " about " + when : " shortly"}.`, ok: true, lead_id: leadId });
+    return json({ say: `Perfect, ${first}. I've got you down${want ? (/^(a|an|the)\s/i.test(want) ? " for " : " for the ") + want : ""} and a salesperson will follow up${when ? " about " + when : " shortly"}.`, ok: true, lead_id: leadId });
   }
 
   return json({ error: "unknown action", actions: ["search_inventory", "vehicle_details", "customer_lookup", "create_lead", "dealership_info"] }, 400);

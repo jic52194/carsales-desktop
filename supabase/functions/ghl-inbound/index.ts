@@ -1,5 +1,6 @@
 // ghl-inbound — GoHighLevel workflow "Webhook" action → CarSales AI OS.
-// Use with the trigger "Customer Replied" (and optionally "Contact Created"). URL: .../functions/v1/ghl-inbound?key=<dealership intake key>
+// Use with the trigger "Customer Replied" (and optionally "Contact Created"). URL: .../functions/v1/ghl-inbound?key=<dealership automation key>
+// (The older public intake key is still accepted so existing workflows keep logging, but only automation-key messages can trigger AI replies.)
 // Matches the contact to a customer (GHL contact id, then phone, then email; creates one if new), logs the inbound
 // message into the dealership Inbox and opens a lead if the customer has none open. Public endpoint; auth = per-dealership key.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -15,7 +16,9 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const key = s(url.searchParams.get("key") || req.headers.get("x-intake-key"), 64);
   if (!key) return json({ error: "missing key" }, 401);
-  const { data: tenant } = await admin.from("tenants").select("id,status").eq("intake_key", key).single();
+  let trusted = true;
+  let { data: tenant } = await admin.from("tenants").select("id,status").eq("automation_key", key).maybeSingle();
+  if (!tenant) { trusted = false; ({ data: tenant } = await admin.from("tenants").select("id,status").eq("intake_key", key).maybeSingle()); }
   if (!tenant || tenant.status !== "active") return json({ error: "unknown dealership" }, 401);
 
   const b: any = await req.json().catch(() => ({}));
@@ -43,7 +46,7 @@ Deno.serve(async (req) => {
     await admin.from("customers").update({ ghl_contact_id: contactId }).eq("id", customerId).is("ghl_contact_id", null);
   }
 
-  if (text) await admin.from("records").insert({ tenant_id: tenant.id, kind: "message", data: { customerId, channel, direction: "inbound", body: text, at: new Date().toISOString(), via: "ghl" } });
+  if (text) await admin.from("records").insert({ tenant_id: tenant.id, kind: "message", data: { customerId, channel, direction: "inbound", body: text, at: new Date().toISOString(), via: "ghl", trusted } });
 
   // make sure someone works it: open a lead if none is open
   const { data: open } = await admin.from("leads").select("id").eq("tenant_id", tenant.id).eq("customer_id", customerId).not("stage", "in", "(sold,lost)").limit(1);

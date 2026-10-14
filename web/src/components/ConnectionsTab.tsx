@@ -15,6 +15,7 @@ import { useTenant } from "@/lib/tenant";
 import { useAuth } from "@/lib/auth";
 import { SUPABASE_URL } from "@/lib/supabase";
 import { ghlSyncCustomers, ghlErrorMessage, refreshGhlStatus } from "@/lib/ghl";
+import GhlSyncCard from "@/components/GhlSyncCard";
 
 export function ConnectionsTab() {
   const tenant = useTenant();
@@ -106,7 +107,8 @@ export function ConnectionsTab() {
   const st = (p: Provider) => rows.find((r) => r.provider === p);
   const lastRun = runs[0];
   const intakeKey = (tenant as any).intakeKey as string | undefined;
-  const inboundUrl = intakeKey ? `${SUPABASE_URL}/functions/v1/ghl-inbound?key=${intakeKey}` : "";
+  const automationKey = (tenant as any).automationKey as string | null;
+  const inboundUrl = automationKey ? `${SUPABASE_URL}/functions/v1/ghl-inbound?key=${automationKey}` : "";
   const ghlRow = st("ghl"); const ghlConnected = ghlRow?.status === "connected";
   const embed = intakeKey ? `<form action="${SUPABASE_URL}/functions/v1/lead-intake" method="POST">
   <input type="hidden" name="key" value="${intakeKey}">
@@ -176,10 +178,12 @@ export function ConnectionsTab() {
               <li>Add the action <b>Webhook</b>, method <b>POST</b>, and paste the URL above.</li>
               <li>Save and <b>Publish</b> the workflow. Text the dealership number from your phone to test it.</li>
             </ol>
-            <p className="text-xs text-muted-foreground">The key in this URL is your dealership's private intake key — treat the URL like a password.</p>
+            <p className="text-xs text-muted-foreground">The key in this URL is your dealership's private automation key — treat the URL like a password. (Older workflows using the website-form key still log replies, but AI auto-replies only run for this URL.)</p>
           </>) : <p className="text-sm text-muted-foreground">Sign in again to load your dealership's inbound URL.</p>}
         </CardContent>
       </Card>
+
+      <GhlSyncCard isAdmin={isAdmin} />
 
       {["Communication", "AI", "Vehicle data", "F&I", "Platform"].map((g) => (
         <Card key={g}>
