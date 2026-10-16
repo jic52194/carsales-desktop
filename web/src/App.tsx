@@ -11,6 +11,7 @@ import { ChangePasswordScreen } from "@/components/ChangePasswordScreen";
 import { TwoFactorScreen } from "@/components/TwoFactorScreen";
 import { ViewAsBanner } from "@/components/ViewAsBanner";
 import DemoBanner from "@/components/DemoBanner";
+import BillingBanner from "@/components/BillingBanner";
 import { OnboardingGate } from "@/components/OnboardingGate";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { AiPanel } from "@/components/AiPanel";
@@ -82,6 +83,7 @@ import DealRescue from "@/pages/DealRescue";
 import Notifications from "@/pages/Notifications";
 import SystemCheck from "@/pages/SystemCheck";
 import NotFound from "@/pages/NotFound";
+import PublicVehicle from "@/pages/PublicVehicle";
 
 const queryClient = new QueryClient();
 
@@ -91,6 +93,13 @@ function Shell() {
 
   // Platform (CarSalesSoftware.com) look until signed in; dealership brand after.
   useEffect(() => { if (user) applyTenantTheme(tenant); else resetTheme(); }, [user, tenant]);
+  // Public pages (no sign-in): /v/<vehicle id> — the vehicle link texted to customers.
+  {
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const rel = window.location.pathname.startsWith(base) ? window.location.pathname.slice(base.length) : window.location.pathname;
+    const pv = rel.match(/^\/v\/([0-9a-f-]{36})\/?$/i);
+    if (pv) return <PublicVehicle id={pv[1]} />;
+  }
   if (!ready) return <div className="fixed inset-0 bg-slate-950" />;
   if (!user && mfaPending) return <TwoFactorScreen />;
   if (!user) return <LoginScreen />;
@@ -120,6 +129,7 @@ function Shell() {
             <main className="flex-1 w-full bg-slate-50 dark:bg-slate-900 relative flex flex-col min-w-0 h-[100dvh] overflow-hidden">
               <ViewAsBanner />
               <DemoBanner />
+              <BillingBanner />
               <TopBar />
               <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
                 <Routes>

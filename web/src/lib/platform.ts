@@ -12,7 +12,7 @@ export function friendly(e: any): string {
 }
 
 export interface PlatformTenant {
-  id: string; slug: string; name: string; website: string | null; phone: string | null; status: string; plan: string;
+  id: string; slug: string; name: string; website: string | null; phone: string | null; status: string; plan: string; is_demo?: boolean; billing?: { status: string; periodEnd: string | null; trialEndsAt: string | null; customer: boolean };
   created_at: string; logo_url: string | null; onboarded: boolean; users: number; vehicles: number; leads: number; current: boolean;
   ghl: { status: string; locationId: string | null; via: "app" | "token"; error: string | null } | null;
 }

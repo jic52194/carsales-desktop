@@ -6,11 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Building2, Plus, ArrowRightLeft, Loader2, CheckCircle2, Clock, Copy, Ban, Play } from "lucide-react";
+import { Building2, Plus, ArrowRightLeft, Loader2, CheckCircle2, Clock, Copy, Ban, Play, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { listTenants, createTenant, switchTenant, updateTenant, type PlatformTenant } from "@/lib/platform";
 import AgencyConnectionCard from "@/components/AgencyConnectionCard";
+import PlatformBillingCard from "@/components/PlatformBillingCard";
+import { billingCheckout, STATUS_LABEL } from "@/lib/billing";
 import AddDealershipWizard from "@/components/AddDealershipWizard";
 import { crmLocations, crmLinkLocation, type CrmLocation, type CrmStatus } from "@/lib/crm";
 import { useSearchParams } from "react-router-dom";
@@ -68,6 +70,11 @@ export default function Dealerships() {
   };
 
   const setPlan = async (t: PlatformTenant, plan: string) => { try { await updateTenant(t.id, { plan }); toast.success(`${t.name}: ${plan}`); await load(); } catch (e: any) { toast.error(e.message); } };
+  const payLink = async (t: PlatformTenant) => {
+    const plan = (["starter", "pro", "enterprise"].includes(t.plan) ? t.plan : "starter") as "starter" | "pro" | "enterprise";
+    try { const { url } = await billingCheckout(plan, t.id); await navigator.clipboard.writeText(url); toast.success(`${t.name}: ${plan} payment link copied — text or email it to the owner (it works for 24 hours)`); }
+    catch (e: any) { toast.error(e.message); }
+  };
   const toggleStatus = async (t: PlatformTenant) => { const status = t.status === "suspended" ? "active" : "suspended"; try { await updateTenant(t.id, { status }); toast.success(status === "suspended" ? `${t.name} suspended — their users can't sign in` : `${t.name} reactivated`); await load(); } catch (e: any) { toast.error(e.message); } };
   const doSwitch = async (t: PlatformTenant) => { try { toast.message(`Switching to ${t.name}…`); await switchTenant(t.id); } catch (e: any) { toast.error(e.message); } };
 
@@ -79,17 +86,19 @@ export default function Dealerships() {
       </div>
 
       <AgencyConnectionCard onStatus={setCrm} />
+      <PlatformBillingCard />
 
       <Card>
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground"><tr><th className="px-4 py-3">Dealership</th><th className="px-4 py-3">Plan</th><th className="px-4 py-3">Onboarding</th><th className="px-4 py-3">GoHighLevel</th><th className="px-4 py-3 text-right">Users</th><th className="px-4 py-3 text-right">In stock</th><th className="px-4 py-3 text-right">Leads</th><th className="px-4 py-3">Since</th><th className="px-4 py-3"></th></tr></thead>
+            <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground"><tr><th className="px-4 py-3">Dealership</th><th className="px-4 py-3">Plan</th><th className="px-4 py-3">Billing</th><th className="px-4 py-3">Onboarding</th><th className="px-4 py-3">GoHighLevel</th><th className="px-4 py-3 text-right">Users</th><th className="px-4 py-3 text-right">In stock</th><th className="px-4 py-3 text-right">Leads</th><th className="px-4 py-3">Since</th><th className="px-4 py-3"></th></tr></thead>
             <tbody className="divide-y">
-              {loading && !rows.length && <tr><td colSpan={9} className="px-4 py-8 text-center text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</td></tr>}
+              {loading && !rows.length && <tr><td colSpan={10} className="px-4 py-8 text-center text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</td></tr>}
               {rows.map((t) => (
                 <tr key={t.id} className={t.current ? "bg-primary/5" : ""}>
                   <td className="px-4 py-3"><div className="flex items-center gap-3">{t.logo_url ? <img src={t.logo_url} alt="" className="h-8 w-8 object-contain rounded bg-white" /> : <div className="h-8 w-8 rounded bg-muted flex items-center justify-center"><Building2 className="h-4 w-4 text-muted-foreground" /></div>}<div><p className="font-semibold">{t.name} {t.current && <Badge variant="outline" className="ml-1">You're here</Badge>}</p><p className="text-xs text-muted-foreground">{t.website?.replace(/^https?:\/\//, "") || "no website"}{t.phone ? ` · ${t.phone}` : ""}</p></div></div></td>
-                  <td className="px-4 py-3"><Select value={t.plan} onValueChange={(v) => setPlan(t, v)}><SelectTrigger className="h-8 w-28 capitalize"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="trial">Trial</SelectItem><SelectItem value="starter">Starter</SelectItem><SelectItem value="pro">Pro</SelectItem><SelectItem value="demo">Demo</SelectItem></SelectContent></Select>{t.status === "suspended" && <Badge variant="destructive" className="ml-2">Suspended</Badge>}</td>
+                  <td className="px-4 py-3"><Select value={t.plan} onValueChange={(v) => setPlan(t, v)}><SelectTrigger className="h-8 w-28 capitalize"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="trial">Trial</SelectItem><SelectItem value="starter">Starter</SelectItem><SelectItem value="pro">Pro</SelectItem><SelectItem value="enterprise">Enterprise</SelectItem><SelectItem value="demo">Demo</SelectItem></SelectContent></Select>{t.status === "suspended" && <Badge variant="destructive" className="ml-2">Suspended</Badge>}</td>
+                  <td className="px-4 py-3">{t.is_demo ? <span className="text-muted-foreground">Demo</span> : <div className="flex items-center gap-1.5"><span className={["past_due", "unpaid"].includes(t.billing?.status ?? "") ? "text-red-700 font-medium" : ["active", "trialing"].includes(t.billing?.status ?? "") ? "text-emerald-700" : "text-muted-foreground"}>{STATUS_LABEL[t.billing?.status ?? "none"]?.label ?? t.billing?.status}</span>{!["active", "trialing", "past_due"].includes(t.billing?.status ?? "") && <Button size="sm" variant="ghost" className="h-7 px-2" title="Copy a Stripe payment link for this dealership's plan" onClick={() => payLink(t)}><Link2 className="h-3.5 w-3.5" /></Button>}</div>}</td>
                   <td className="px-4 py-3">{t.onboarded ? <span className="inline-flex items-center gap-1 text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Confirmed</span> : <span className="inline-flex items-center gap-1 text-amber-700"><Clock className="h-4 w-4" /> Waiting for owner</span>}</td>
                   <td className="px-4 py-3">{t.ghl?.status === "connected" ? <span className="inline-flex items-center gap-1 text-emerald-700" title={t.ghl.locationId ?? ""}><CheckCircle2 className="h-4 w-4" /> {t.ghl.via === "app" ? "Connected" : "Token"}</span>
                     : t.ghl?.error ? <Button size="sm" variant="ghost" className="text-destructive h-7 px-2" title={t.ghl.error} onClick={() => openLink(t)}>Fix</Button>
@@ -119,7 +128,7 @@ export default function Dealerships() {
             <div className="space-y-1"><Label>City</Label><Input value={f.city} onChange={(e) => set("city", e.target.value)} /></div>
             <div className="grid grid-cols-2 gap-3"><div className="space-y-1"><Label>State</Label><Input value={f.state} onChange={(e) => set("state", e.target.value)} maxLength={2} placeholder="MA" /></div><div className="space-y-1"><Label>ZIP</Label><Input value={f.zip} onChange={(e) => set("zip", e.target.value)} /></div></div>
             <div className="space-y-1"><Label>Logo URL</Label><Input value={f.logo_url} onChange={(e) => set("logo_url", e.target.value)} placeholder="https://…/logo.png" /></div>
-            <div className="space-y-1"><Label>Plan</Label><Select value={f.plan} onValueChange={(v) => set("plan", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="trial">Trial</SelectItem><SelectItem value="starter">Starter</SelectItem><SelectItem value="pro">Pro</SelectItem><SelectItem value="demo">Demo</SelectItem></SelectContent></Select></div>
+            <div className="space-y-1"><Label>Plan</Label><Select value={f.plan} onValueChange={(v) => set("plan", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="trial">Trial</SelectItem><SelectItem value="starter">Starter</SelectItem><SelectItem value="pro">Pro</SelectItem><SelectItem value="enterprise">Enterprise</SelectItem><SelectItem value="demo">Demo</SelectItem></SelectContent></Select></div>
             <div className="grid grid-cols-2 gap-3"><div className="space-y-1"><Label>Brand color</Label><Input type="color" value={f.primary} onChange={(e) => set("primary", e.target.value)} className="h-10 p-1" /></div><div className="space-y-1"><Label>Accent</Label><Input type="color" value={f.accent} onChange={(e) => set("accent", e.target.value)} className="h-10 p-1" /></div></div>
             <div className="space-y-1"><Label>Website platform (inventory sync)</Label><Select value={f.platform} onValueChange={(v) => set("platform", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Dealer Car Search">Dealer Car Search</SelectItem><SelectItem value="none">None / manual inventory</SelectItem></SelectContent></Select></div>
             {f.platform === "Dealer Car Search" && <div className="space-y-1 md:col-span-2"><Label>Dealer Car Search dealer ID</Label><Input value={f.dealerId} onChange={(e) => set("dealerId", e.target.value)} placeholder="e.g. 19988 — from their photo URLs: imagescdn.dealercarsearch.com/Media/<ID>/…" /><p className="text-xs text-muted-foreground">Inventory is pulled from the website every night; you can also hit "Sync now" in their Settings after switching in.</p></div>}

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import AiVoiceTab from "@/components/AiVoiceTab";
+import BillingTab from "@/components/BillingTab";
 import ImportGhlBranding from "@/components/ImportGhlBranding";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -93,7 +94,7 @@ export default function Settings() {
     <div className="p-4 md:p-8 space-y-6 max-w-5xl mx-auto">
       <div><h1 className="text-3xl font-black">Settings</h1><p className="text-muted-foreground">{tenant.name}</p></div>
       <Tabs value={tab} onValueChange={(v) => setParams(v === "dealership" ? {} : { tab: v }, { replace: true })}>
-        <TabsList className="w-full justify-start overflow-x-auto"><TabsTrigger value="dealership">Dealership</TabsTrigger><TabsTrigger value="branding">Branding</TabsTrigger>{isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}{isAdmin && <TabsTrigger value="stores">Stores</TabsTrigger>}<TabsTrigger value="ai-voice">AI Voice</TabsTrigger><TabsTrigger value="connections">Connections</TabsTrigger><TabsTrigger value="security">Security</TabsTrigger>{isAdmin && <TabsTrigger value="data">Data</TabsTrigger>}</TabsList>
+        <TabsList className="w-full justify-start overflow-x-auto"><TabsTrigger value="dealership">Dealership</TabsTrigger><TabsTrigger value="branding">Branding</TabsTrigger>{isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}{isAdmin && <TabsTrigger value="stores">Stores</TabsTrigger>}<TabsTrigger value="ai-voice">AI Voice</TabsTrigger><TabsTrigger value="connections">Connections</TabsTrigger><TabsTrigger value="security">Security</TabsTrigger>{isAdmin && <TabsTrigger value="billing">Billing</TabsTrigger>}{isAdmin && <TabsTrigger value="data">Data</TabsTrigger>}</TabsList>
 
         <TabsContent value="dealership"><Card><CardHeader className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 space-y-0"><div><CardTitle>Dealership information</CardTitle><CardDescription>{onboarding && !onboarding.preview ? `Confirmed by ${onboarding.completedByName || "dealer admin"} on ${new Date(onboarding.at).toLocaleDateString()}` : "Not yet confirmed by the dealership — the owner/admin will be asked on first sign-in."}</CardDescription></div>{isAdmin && <ImportGhlBranding current={t as any} onApply={(p) => setT({ ...t, ...p })} />}</CardHeader>
           <CardContent className="grid md:grid-cols-2 gap-3">
@@ -152,6 +153,7 @@ export default function Settings() {
         <TabsContent value="connections"><ConnectionsTab /></TabsContent>
 
         <TabsContent value="security"><SecurityTab /></TabsContent>
+        {isAdmin && <TabsContent value="billing"><BillingTab /></TabsContent>}
 
         {isAdmin && <TabsContent value="data" className="space-y-6"><ImportCustomers /><Card><CardHeader><CardTitle>Data</CardTitle><CardDescription>Your data lives in the CarSales AI OS cloud and syncs to every device. Export a copy any time.</CardDescription></CardHeader>
           <CardContent className="flex flex-wrap gap-2"><Button variant="outline" onClick={exportData}><Download className="h-4 w-4 mr-1" /> Export everything (JSON)</Button></CardContent></Card><ActivityLog /></TabsContent>}
