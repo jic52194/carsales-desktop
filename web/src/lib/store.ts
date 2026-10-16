@@ -11,6 +11,7 @@ export interface Customer extends BaseRow {
   firstName: string; lastName: string; phone?: string; email?: string;
   address?: string; city?: string; state?: string; zip?: string;
   source?: string; notes?: string; ownerId?: string;
+  /** texted STOP — no automated texts */ smsOptOut?: boolean;
 }
 export type LeadStage = "new" | "contacted" | "appointment" | "negotiating" | "sold" | "lost";
 export interface Lead extends BaseRow {
@@ -54,7 +55,7 @@ const num = (x: any) => (x == null ? 0 : Number(x));
 const MAP: { [N in CollectionName]: { table: string; from: (r: any) => RowOf<N>; to: (v: Partial<RowOf<N>>) => any; order: string } } = {
   customers: {
     table: "customers", order: "created_at",
-    from: (r) => ({ ...base(r), firstName: r.first_name, lastName: r.last_name ?? "", phone: r.phone ?? undefined, email: r.email ?? undefined, address: r.street ?? r.address?.street ?? undefined, city: r.city ?? undefined, state: r.state ?? undefined, zip: r.zip ?? undefined, source: r.source ?? undefined, notes: r.notes ?? undefined, ownerId: r.owner_id ?? undefined }),
+    from: (r) => ({ ...base(r), firstName: r.first_name, lastName: r.last_name ?? "", phone: r.phone ?? undefined, email: r.email ?? undefined, address: r.street ?? r.address?.street ?? undefined, city: r.city ?? undefined, state: r.state ?? undefined, zip: r.zip ?? undefined, source: r.source ?? undefined, notes: r.notes ?? undefined, ownerId: r.owner_id ?? undefined, smsOptOut: !!r.sms_opt_out }),
     to: (v) => pick({ first_name: v.firstName, last_name: v.lastName, phone: v.phone, email: v.email, street: v.address, city: v.city, state: v.state, zip: v.zip, source: v.source, notes: v.notes, owner_id: v.ownerId }),
   },
   leads: {

@@ -5,6 +5,16 @@
 import { useEffect, useState } from "react";
 import { BESTPRICE_TENANT } from "@/tenants/bestprice";
 
+export interface DeskingProduct { id: string; kind: "warranty" | "gap" | "maintenance"; name: string; retail: number; cost: number }
+export interface DeskingSettings {
+  pack: number; docFee: number; taxRate: number; nonTaxableFees: number; termMonths: number; apr: number; bankFee: number; reserveSplit: number;
+  taxRules: { tradeCredit: boolean; docFeeTaxable: boolean; productsTaxable: boolean; rebateReducesTax: boolean };
+  products: DeskingProduct[];
+  /** house rate sheet: credit tier → buy rate (APR = buy rate + markup) */
+  rateTiers?: RateTier[];
+  markup?: number;
+}
+export interface RateTier { id: string; name: string; minScore: number; buyRate: number; maxTerm: number | null }
 export interface TenantHours { [day: string]: string }
 
 export interface Tenant {
@@ -32,6 +42,8 @@ export interface Tenant {
   subscribedAt: string;
   seedVersion: number;   // bump to re-seed inventory/customers on next launch
   aiVoice?: AiVoice;     // brand voice for the AI assistant (Settings → AI Voice)
+  desking?: DeskingSettings;   // dealership-wide desking defaults (Settings → Desking)
+  automations?: import("./plays").AutomationSettings;   // follow-up plays on/off + edits (Automations)
 }
 
 export type AiVoicePreset = "professional" | "friendly" | "felipe" | "custom";
@@ -82,6 +94,8 @@ export function tenantFromRow(r: any): Tenant {
     social: r.social ?? {}, googleMapsUrl: undefined, financing: r.financing ?? { notes: [] }, disclaimers: r.disclaimers ?? [],
     inventorySource: r.inventory_source ?? undefined, plan: r.plan ?? "starter", subscribedAt: r.created_at ?? "", seedVersion: 0,
     aiVoice: r.ai_voice ?? { preset: "professional", scope: "staff" },
+    desking: r.desking && Object.keys(r.desking).length ? r.desking : undefined,
+    automations: r.automations ?? {},
     ...( { onboarding: r.onboarding ?? null, intakeKey: r.intake_key ?? null, automationKey: r.automation_key ?? null, isDemo: !!r.is_demo, demoResetAt: r.demo_reset_at ?? null, billingStatus: r.billing_status ?? "none", trialEndsAt: r.trial_ends_at ?? null } as any ),
   };
 }
@@ -133,6 +147,8 @@ export async function saveTenantOverrides(patch: Partial<Tenant>) {
   if (patch.colors !== undefined) row.colors = patch.colors;
   if (patch.hours !== undefined) row.hours = patch.hours;
   if (patch.aiVoice !== undefined) row.ai_voice = patch.aiVoice;
+  if (patch.desking !== undefined) row.desking = patch.desking;
+  if (patch.automations !== undefined) row.automations = patch.automations;
   if (cur.dbId) {
     const { supabase } = await import("@/lib/supabase");
     const { data, error } = await supabase.from("tenants").update(row).eq("id", cur.dbId).select().single();

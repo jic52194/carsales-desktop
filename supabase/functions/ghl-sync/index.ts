@@ -128,31 +128,66 @@ async function pushLead(leadId: string) {
   return { ok: true, oppId };
 }
 
+async function brain(t: any, action: string, params: any) {   // the Phone AI's tools (inventory, times, booking) — same dealership key
+  if (!t.automation_key) return null;
+  const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/voice-brain?key=${encodeURIComponent(t.automation_key)}&action=${action}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(params) });
+  return r.ok ? await r.json().catch(() => null) : null;
+}
 async function replyJob(recordId: string) {
   const { data: rec } = await admin.from("records").select("id,tenant_id,data,created_at").eq("id", recordId).single();
   const m: any = rec?.data; if (!rec || !m?.customerId || m.direction !== "inbound" || !m.body) return { skipped: "not an inbound text" };
-  const { data: t } = await admin.from("tenants").select("id,name,phone,website,address,hours,ai_voice").eq("id", rec.tenant_id).single();
+  const { data: t } = await admin.from("tenants").select("id,name,phone,website,address,hours,ai_voice,automation_key").eq("id", rec.tenant_id).single();
   const mode = t?.ai_voice?.autoReply ?? "off"; if (!t || mode === "off") return { skipped: "auto-reply off" };
   if (OPT_OUT.test(m.body)) return { skipped: "opt-out" };
   const key = await aiKey(t.id); if (!key) return { skipped: "no AI key" };
   const { data: hist } = await admin.from("records").select("data,created_at").eq("tenant_id", t.id).eq("kind", "message").filter("data->>customerId", "eq", m.customerId).order("created_at", { ascending: false }).limit(16);
   const conv = (hist ?? []).reverse().map((h: any) => `${h.data.direction === "inbound" ? "CUSTOMER" : "DEALERSHIP"}: ${String(h.data.body ?? "").slice(0, 500)}`).join("\n");
-  const { data: c } = await admin.from("customers").select("first_name,last_name").eq("id", m.customerId).single();
+  const { data: c } = await admin.from("customers").select("first_name,last_name,phone,sms_opt_out").eq("id", m.customerId).eq("tenant_id", t.id).single();
+  if (!c || c.sms_opt_out) return { skipped: "customer opted out" };
+  const { data: lead } = await admin.from("leads").select("vehicle_id,vehicles(stock_number,year,make,model,trim,price)").eq("tenant_id", t.id).eq("customer_id", m.customerId).order("created_at", { ascending: false }).limit(1);
+  const lv: any = lead?.[0]?.vehicles;
+  const { data: inv } = await admin.from("vehicles").select("id,stock_number,year,make,model,trim,mileage,price,exterior_color").eq("tenant_id", t.id).eq("status", "Available").order("price", { ascending: true }).limit(120);
+  const invLine = (inv ?? []).map((v: any) => `#${v.stock_number} ${v.year} ${v.make} ${v.model}${v.trim ? " " + v.trim : ""}, ${v.mileage ? Math.round(v.mileage / 1000) + "k mi" : ""}, ${v.price ? "$" + Math.round(v.price).toLocaleString("en-US") : "call"}, ${v.exterior_color ?? ""} — https://app.carsalessoftware.com/v/${v.id}`).join("\n");
+  // open appointment times for the next few days (same calendar the Phone AI books)
+  const slots: { iso: string; label: string }[] = []; let tz = "America/New_York";
+  for (const day of ["today", "tomorrow", new Date(Date.now() + 2 * 864e5).toLocaleDateString("en-US", { weekday: "long", timeZone: "America/New_York" })]) {
+    const r = await brain(t, "check_availability", { day }).catch(() => null);
+    if (r?.timezone) tz = r.timezone;
+    for (const iso of (r?.slots ?? []) as string[]) if (!slots.some((x) => x.iso === iso)) slots.push({ iso, label: new Intl.DateTimeFormat("en-US", { timeZone: r?.timezone ?? "America/New_York", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso)) });
+  }
   const voice = voiceFor({ ...(t.ai_voice ?? {}), scope: t.ai_voice?.scope ?? "staff" }, "reply_suggestion");
-  const system = `You are ${voice.name === "Assistant" ? "the assistant" : voice.name} texting customers for ${t.name}. ${dealerFacts(t)}\n${voice.text}\nWrite the dealership's next SMS reply (under 300 characters). Answer only from the data; if a price or availability isn't in the data, say you'll confirm. Move toward a visit or test drive. Never promise financing, rates or trade values. Output only the message text.\nAVAILABLE INVENTORY: ${await inventoryLine(t.id)}`;
-  const text = (await claude(key, system, `Customer: ${c?.first_name ?? ""} ${c?.last_name ?? ""}\nCONVERSATION (oldest first):\n${conv}`)).slice(0, 480);
-  let sent = false, why = "";
+  const system = `You are ${voice.name === "Assistant" ? "the assistant" : voice.name} texting customers for ${t.name}. ${dealerFacts(t)}\n${voice.text}
+Write the dealership's next SMS reply (under 300 characters). Answer only from the data; if a price or availability isn't in the data, say you'll confirm. Answer questions quickly, send the car's link when it helps, and move toward a visit or test drive. Never promise financing, rates or trade values.
+OPEN APPOINTMENT TIMES: ${slots.length ? slots.map((x, i) => `[${i}] ${x.label}`).join("; ") : "none listed — ask what day works and say you'll confirm"}.
+If the customer clearly agrees to one of those exact times, set "book" to its number; otherwise offer two of them.
+Reply ONLY with JSON: {"text": "<the SMS>", "book": <slot number or null>, "stock": "<stock # of the car they want, or empty>"}
+AVAILABLE INVENTORY:\n${invLine}`;
+  const raw = await claude(key, system, `Customer: ${c?.first_name ?? ""} ${c?.last_name ?? ""}${lv ? `\nCar they asked about: #${lv.stock_number} ${lv.year} ${lv.make} ${lv.model}` : ""}\nCONVERSATION (oldest first):\n${conv}`, 500);
+  let text = raw, book: number | null = null, stock = "";
+  try { const j = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)); text = String(j.text ?? "").trim() || raw; book = Number.isInteger(j.book) ? j.book : null; stock = String(j.stock ?? "").replace(/^#/, ""); } catch { /* plain text */ }
+  text = text.slice(0, 480);
+  const slot = book !== null && slots[book] ? slots[book] : null;
+  let sent = false, why = "", booked: string | null = null;
   if (mode === "auto") {
     const since = new Date(Date.now() - 30 * 60e3).toISOString();
-    const humanRecent = (hist ?? []).some((h: any) => h.data.direction === "outbound" && h.data.via !== "felipe" && h.created_at >= since);
+    const AUTO = ["felipe", "sequence", "workflow", "felipe-missed"];
+    const humanRecent = (hist ?? []).some((h: any) => h.data.direction === "outbound" && !AUTO.includes(h.data.via) && !h.data.sentBy && h.created_at >= since);
     const today = new Date(Date.now() - 24 * 3600e3).toISOString();
     const autoCount = (hist ?? []).filter((h: any) => h.data.via === "felipe" && h.created_at >= today).length;
-    if (humanRecent) why = "a person replied in the last 30 minutes";
-    else if (autoCount >= 3) why = "3 auto-replies already today";
-    else { const g = await ghlFor(t.id); if (!g) why = "GHL not connected"; else { const { contactId } = await ensureContact(g, m.customerId); const id = await sendSms(g, contactId, text); await admin.from("records").insert({ tenant_id: t.id, kind: "message", data: { customerId: m.customerId, channel: "sms", direction: "outbound", body: text, at: new Date().toISOString(), via: "felipe", ghlMessageId: id, by: voice.name } }); sent = true; } }
+    const hourNow = Number(new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hourCycle: "h23" }).format(new Date()));
+    if (hourNow < 8 || hourNow >= 21) why = "after hours (8am–9pm) — saved as a draft for the team";
+    else if (humanRecent) why = "a person replied in the last 30 minutes";
+    else if (autoCount >= 6) why = "6 auto-replies already today";
+    else {
+      if (slot && c?.phone) {   // book it — the Phone AI's booking texts the confirmation with the address
+        const r = await brain(t, "book_appointment", { phone: c.phone, first_name: c.first_name, last_name: c.last_name ?? "", start_time: slot.iso, stock_number: stock || lv?.stock_number || "", notes: "Booked by AI text reply" }).catch(() => null);
+        if (r?.ok) { booked = slot.label; sent = true; }
+      }
+      if (!booked) { const g = await ghlFor(t.id); if (!g) why = "GHL not connected"; else { const { contactId } = await ensureContact(g, m.customerId); const id = await sendSms(g, contactId, text); await admin.from("records").insert({ tenant_id: t.id, kind: "message", data: { customerId: m.customerId, channel: "sms", direction: "outbound", body: text, at: new Date().toISOString(), via: "felipe", ghlMessageId: id, by: voice.name } }); sent = true; } }
+    }
   }
-  await admin.from("records").update({ data: { ...m, aiDraft: { text, by: voice.name, at: new Date().toISOString(), sent, held: why || null } } }).eq("id", rec.id);
-  return { ok: true, sent, held: why || null };
+  await admin.from("records").update({ data: { ...m, aiDraft: { text, by: voice.name, at: new Date().toISOString(), sent, held: why || null, book: slot?.label ?? null, booked } } }).eq("id", rec.id);
+  return { ok: true, sent, booked, held: why || null };
 }
 
 async function briefJob() {

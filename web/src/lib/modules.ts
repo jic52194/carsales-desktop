@@ -31,6 +31,7 @@ export const MODULES: Module[] = [
   { path: "/leads", label: "Leads & Pipeline", icon: Kanban, group: "Sales & CRM", roles: SALES },
   { path: "/deals", label: "Deals", icon: FileSignature, group: "Sales & CRM", roles: SALES },
   { path: "/follow-up", label: "AI Follow-Up", icon: Sparkles, group: "Sales & CRM", roles: SALES },
+  { path: "/automations", label: "Automations", icon: Zap, group: "Sales & CRM", roles: SALES },
   { path: "/rescue", label: "Deal Rescue", icon: LifeBuoy, group: "Sales & CRM", roles: SALES },
   { path: "/leaderboard", label: "Leaderboards & Spiffs", icon: Trophy, group: "Sales & CRM", roles: SALES },
   { path: "/bdc", label: "BDC Call Center", icon: Headset, group: "Sales & CRM", roles: SALES },

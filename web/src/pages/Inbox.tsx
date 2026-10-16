@@ -88,7 +88,7 @@ export default function Inbox() {
     return answered && !d.sent ? null : d;
   }, [local]);
   const thread = useMemo(() => mergeThread(local, ghl.connected ? live : []), [local, live, ghl.connected]);
-  const who = (id?: string | null) => users.find((u) => u.id === id)?.fullName ?? "Staff";
+  const who = (id?: string | null) => users.find((u) => u.id === id)?.fullName ?? (id && !/^[0-9a-f-]{36}$/i.test(id) ? id : "Staff");   // automations store a label ("Automation · …")
 
   // live thread from GoHighLevel: on open, every 20s, and whenever this customer's local records change
   const loadLive = useCallback(async (quiet = false) => {
@@ -208,9 +208,9 @@ export default function Inbox() {
               </CardContent>
               <div className="border-t p-4 space-y-2">
                 {aiNote && (aiNote.sent
-                  ? <p className="text-xs rounded-md border bg-muted/40 p-2 flex items-start gap-1.5"><Sparkles className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" /><span><b>{aiNote.by}</b> answered this text automatically.</span></p>
+                  ? <p className="text-xs rounded-md border bg-muted/40 p-2 flex items-start gap-1.5"><Sparkles className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" /><span><b>{aiNote.by}</b> {(aiNote as any).booked ? <>booked an appointment for <b>{(aiNote as any).booked}</b> and texted the confirmation.</> : "answered this text automatically."}</span></p>
                   : <div className="rounded-lg border border-primary/30 bg-primary/5 p-2.5 space-y-1.5">
-                      <p className="text-xs font-semibold flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5 text-primary" /> {aiNote.by} drafted a reply{aiNote.held ? ` (held: ${aiNote.held})` : ""}</p>
+                      <p className="text-xs font-semibold flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5 text-primary" /> {aiNote.by} drafted a reply{aiNote.held ? ` (held: ${aiNote.held})` : ""}{(aiNote as any).book ? ` · suggests booking ${(aiNote as any).book}` : ""}</p>
                       <p className="text-sm whitespace-pre-wrap">{aiNote.text}</p>
                       <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => { setChannel("sms"); setBody(aiNote.text); }}>Use this reply</Button></div>
                     </div>)}

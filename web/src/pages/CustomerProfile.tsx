@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import CustomerAutomations from "@/components/CustomerAutomations";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -146,6 +147,7 @@ export default function CustomerProfile() {
           </CardContent>
         </Card>
         <div className="space-y-6">
+          <CustomerAutomations customerId={c.id} optedOut={c.smsOptOut} />
           <Card>
             <CardHeader><CardTitle className="text-base flex items-center gap-2"><Car className="h-4 w-4" /> Vehicles of interest</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">

@@ -13,6 +13,27 @@ import { useCollection, insert, update, fullName, money, fmtDate, logActivity, g
 import { useInventory, vTitle } from "@/lib/inventory";
 import { useAuth, useUsers } from "@/lib/auth";
 import { askAi, AiNotConfigured } from "@/lib/ai";
+import { useTenant } from "@/lib/tenant";
+import { useEnrollments } from "@/lib/automations";
+import { Zap } from "lucide-react";
+
+/** Shows whether the automatic rescue plays are on, and how many customers they're working right now. */
+function AutoRescueBanner() {
+  const tenant = useTenant();
+  const plays = tenant.automations?.plays ?? {};
+  const keys = ["stalled_deal", "lost_lead", "be_back", "dead_deal"];
+  const on = keys.filter((k) => plays[k]?.enabled);
+  const { rows } = useEnrollments({ days: 60 });
+  const working = rows.filter((r) => r.status === "active" && keys.includes(r.play)).length;
+  const saved = rows.filter((r) => keys.includes(r.play) && (r.status === "replied" || r.status === "booked")).length;
+  return (
+    <Card className={on.length ? "border-primary/40" : "border-amber-300 bg-amber-50/50"}><CardContent className="p-4 flex flex-col md:flex-row md:items-center gap-3 text-sm">
+      <Zap className="h-5 w-5 text-primary shrink-0" />
+      <p className="flex-1">{on.length ? <><b>Auto-rescue is on</b> ({on.length} of {keys.length} plays) — stalled deals, lost leads, be-backs and declines get a manager task and a save text automatically. Working {working} now · {saved} replied or booked in 60 days.</> : <><b>Auto-rescue is off.</b> Turn on the rescue plays and every stalled deal gets a manager task and a save text without anyone remembering to.</>}</p>
+      <Button asChild size="sm" variant={on.length ? "outline" : "default"}><Link to="/automations">{on.length ? "See rescue plays" : "Turn on auto-rescue"}</Link></Button>
+    </CardContent></Card>
+  );
+}
 
 const DAY = 86400000;
 const OPEN: Deal["status"][] = ["working", "pending_approval", "approved"];
@@ -76,6 +97,8 @@ export default function DealRescue() {
         <div><h1 className="text-3xl font-black">Deal Rescue</h1><p className="text-muted-foreground">Deals and negotiations that went quiet — before they go cold.</p></div>
         <div className="flex items-center gap-2 text-sm"><span className="text-muted-foreground">No activity for</span><Select value={days} onValueChange={setDays}><SelectTrigger className="w-28"><SelectValue /></SelectTrigger><SelectContent>{["2", "3", "5", "7", "14"].map((d) => <SelectItem key={d} value={d}>{d} days</SelectItem>)}</SelectContent></Select></div>
       </div>
+
+      <AutoRescueBanner />
 
       <div className="grid grid-cols-3 gap-3">
         <Card><CardContent className="p-4"><p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">At risk</p><p className="text-2xl font-black">{risks.length}</p><p className="text-xs text-muted-foreground">{risks.filter((r) => r.kind === "deal").length} deals · {risks.filter((r) => r.kind === "lead").length} negotiations</p></CardContent></Card>

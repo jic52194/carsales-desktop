@@ -104,7 +104,7 @@ export default function WorkflowBuilder() {
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-6xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
-        <div><h1 className="text-3xl font-black">Workflows</h1><p className="text-muted-foreground">When something happens, create the task or send the text automatically.</p></div>
+        <div><h1 className="text-3xl font-black">Workflows</h1><p className="text-muted-foreground">When something happens, create the task or send the text automatically. For multi-step follow-up (texts over days, stops when they reply) use <Link to="/automations" className="underline font-medium text-foreground">Automations</Link>.</p></div>
         {canEdit && <Button onClick={() => openEdit("new")}><Plus className="h-4 w-4 mr-1" /> New rule</Button>}
       </div>
 

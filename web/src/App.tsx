@@ -79,6 +79,7 @@ import DashboardBuilder from "@/pages/DashboardBuilder";
 import DealHeatmap from "@/pages/DealHeatmap";
 import SecurityCenter from "@/pages/SecurityCenter";
 import WorkflowBuilder from "@/pages/WorkflowBuilder";
+import Automations from "@/pages/Automations";
 import DealRescue from "@/pages/DealRescue";
 import Notifications from "@/pages/Notifications";
 import SystemCheck from "@/pages/SystemCheck";
@@ -189,6 +190,7 @@ function Shell() {
                   <Route path="/heatmap" element={<DealHeatmap />} />
                   <Route path="/security" element={<SecurityCenter />} />
                   <Route path="/workflows" element={<WorkflowBuilder />} />
+                  <Route path="/automations" element={<Automations />} />
                   <Route path="/rescue" element={<DealRescue />} />
                   <Route path="/notifications" element={<Notifications />} />
                   <Route path="/system-check" element={<SystemCheck />} />
